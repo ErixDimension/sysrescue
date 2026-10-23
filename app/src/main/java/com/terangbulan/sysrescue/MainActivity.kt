@@ -23,9 +23,10 @@ class MainActivity : AppCompatActivity() {
 
         AdbDeviceWatcher.start(this)
 
-        // GUNAKAN repeatOnLifecycle: Log berhenti update saat masuk ke BrowserActivity (Background)
+        // RESUMED = hanya update log saat MainActivity benar-benar di depan.
+        // Saat BrowserActivity terbuka (MainActivity di-PAUSE), collector berhenti.
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 DebugLogger.logs.collect { fullLog ->
                     val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
                     b.tvLog.text = displayLog
@@ -34,7 +35,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 DebugLogger.status.collect {
                     b.tvStatus.text = it
                     b.btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true

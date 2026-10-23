@@ -29,7 +29,7 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
             transport.exec("ls -la --color=never ${shellQuote(normalized)}/ 2>/dev/null")
         } catch (e: Throwable) {
             DebugLogger.log("[R] exec error: ${e.message}")
-            return@withContext emptyList()
+            return@withContext emptyList()  // Jangan crash, return empty
         }
 
         if (out.isBlank()) {
@@ -41,7 +41,9 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
 
         if (parsed.isEmpty() && lines.isNotEmpty()) {
-            DebugLogger.log("[R] parsed 0 dari ${lines.size} baris")
+            DebugLogger.log("[R] parsed 0 dari ${lines.size} baris — output tidak sesuai format ls")
+        } else {
+            DebugLogger.log("[R] ${parsed.size} item di $normalized")
         }
         parsed
     }
@@ -61,7 +63,7 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         if (timeIdx < 0 || timeIdx >= parts.size - 1) return null
 
         var name = parts.drop(timeIdx + 1).joinToString(" ")
-        name = name.replace(Regex("\\\\(.)"), "$1") // Hapus backslash escaping
+        name = name.replace(Regex("\\\\(.)"), "$1")
         if (name == "." || name == "..") return null
 
         val sizeStr = parts.getOrNull(timeIdx - 2) ?: "0"
