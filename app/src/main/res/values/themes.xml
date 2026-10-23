@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Gunakan tema bawaan Android yang paling ringan -->
-    <style name="Theme.SYSrescue" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- Gunakan tema AppCompat yang ringan tanpa ActionBar -->
+    <style name="Theme.SYSrescue" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">#0B0F14</item>
     </style>
 </resources>
