@@ -2,7 +2,6 @@ package com.terangbulan.sysrescue
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -23,17 +22,6 @@ class MainActivity : AppCompatActivity() {
 
         AdbDeviceWatcher.start(this)
 
-        // RESUMED = hanya update log saat MainActivity benar-benar di depan.
-        // Saat BrowserActivity terbuka (MainActivity di-PAUSE), collector berhenti.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                DebugLogger.logs.collect { fullLog ->
-                    val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
-                    b.tvLog.text = displayLog
-                }
-            }
-        }
-
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 DebugLogger.status.collect {
@@ -43,15 +31,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        b.btnClear.setOnClickListener { DebugLogger.clear() }
-        b.btnCopy.setOnClickListener {
-            val text = DebugLogger.logs.value
-            if (text.isNotBlank()) {
-                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Log", text))
-                Toast.makeText(this, "Log dicopy", Toast.LENGTH_SHORT).show()
-            }
-        }
         b.btnOpenBrowser.setOnClickListener {
             startActivity(Intent(this, BrowserActivity::class.java))
         }
