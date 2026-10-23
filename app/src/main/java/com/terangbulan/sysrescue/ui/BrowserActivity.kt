@@ -15,6 +15,7 @@ import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.manager.AdbFileManager
 import com.terangbulan.sysrescue.manager.LocalFileManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,14 +29,20 @@ class BrowserActivity : Activity() {
 
     private lateinit var listView: ListView
     private lateinit var tvPath: TextView
+    private lateinit var tvMode: TextView
     private lateinit var adapter: FileAdapter
 
     private val localMgr = LocalFileManager()
     private var adbMgr: AdbFileManager? = null
     private var isRemote = false
 
+    // 🎯 Dua stack terpisah: masing-masing ingat posisinya sendiri
     private data class NavSeg(val path: String)
-    private val navStack = mutableListOf<NavSeg>()
+    private val localStack = mutableListOf<NavSeg>()
+    private val remoteStack = mutableListOf<NavSeg>()
+
+    private fun currentStack(): MutableList<NavSeg> = if (isRemote) remoteStack else localStack
+    private fun currentPath(): String = currentStack().last().path
 
     private fun dp(dp: Int): Int = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics
@@ -50,7 +57,7 @@ class BrowserActivity : Activity() {
             setBackgroundColor(Color.parseColor("#0B0F14"))
         }
 
-        // Top bar
+        // Top bar: tombol ↑ + path + label mode
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -72,6 +79,7 @@ class BrowserActivity : Activity() {
             textSize = 12f
             typeface = Typeface.MONOSPACE
             maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.START
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginStart = dp(8)
             }
@@ -86,6 +94,7 @@ class BrowserActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             setPadding(dp(8), dp(4), dp(8), dp(4))
+            gravity = Gravity.CENTER_VERTICAL
         }
 
         val btnLocal = Button(this).apply {
@@ -98,6 +107,14 @@ class BrowserActivity : Activity() {
             text = "🔧 REMOTE"
             layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
             setOnClickListener { switchTo(true) }
+        }
+
+        tvMode = TextView(this).apply {
+            text = "LOCAL"
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(64), dp(44))
         }
 
         switchBar.addView(btnLocal)
@@ -115,47 +132,71 @@ class BrowserActivity : Activity() {
         adapter = FileAdapter { entry -> enterFolder(entry) }
         listView.adapter = adapter
 
-        navStack.add(NavSeg(localMgr.rootPath()))
+        // 🎯 Init: dua stack mulai dari posisi default masing-masing
+        localStack.add(NavSeg(localMgr.rootPath()))
+        remoteStack.add(NavSeg("/sdcard"))
+
         loadCurrent()
     }
 
     private fun switchTo(remote: Boolean) {
         if (isRemote == remote) return
         isRemote = remote
-        navStack.clear()
-        navStack.add(NavSeg(if (remote) "/sdcard" else localMgr.rootPath()))
+        // Update label mode
+        tvMode.text = if (remote) "REMOTE" else "LOCAL"
+        tvMode.setTextColor(if (remote) Color.parseColor("#FFA726") else Color.parseColor("#66BB6A"))
+        // Load posisi terakhir dari stack yang sesuai (tidak reset!)
         loadCurrent()
     }
 
     private fun loadCurrent() {
-        val path = navStack.last().path
+        val path = currentPath()
+        val pathLabel = if (isRemote) "[B] $path" else "[A] $path"
+        
+        // 🔥 Update path SECARA SYNCHRONOUS (sebelum coroutine) — efek realtime!
+        tvPath.text = pathLabel
+        
         loadJob?.cancel()
         loadJob = scope.launch {
-            tvPath.text = path
-            val list: List<FileEntry> = if (isRemote) {
-                val t = AdbDeviceWatcher.transport
-                if (t != null && t.isConnected) {
-                    val mgr = adbMgr ?: AdbFileManager(t).also { adbMgr = it }
-                    mgr.list(path)
-                } else emptyList()
-            } else {
-                localMgr.list(path)
+            // 🔥 Kosongkan list seketika sebagai tanda sedang loading
+            adapter.setItems(emptyList())
+            listView.setSelection(0)
+
+            val list: List<FileEntry> = try {
+                if (isRemote) {
+                    val t = AdbDeviceWatcher.transport
+                    if (t != null && t.isConnected) {
+                        val mgr = adbMgr ?: AdbFileManager(t).also { adbMgr = it }
+                        mgr.list(path)
+                    } else emptyList()
+                } else {
+                    localMgr.list(path)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emptyList()
             }
+            
             adapter.setItems(list)
+            listView.setSelection(0)
         }
     }
 
     private fun enterFolder(entry: FileEntry) {
-        when (entry) {
-            is FileEntry.Local -> navStack.add(NavSeg(entry.absolutePath))
-            is FileEntry.Remote -> navStack.add(NavSeg(entry.fullPath))
+        val stack = currentStack()
+        when {
+            isRemote && entry is FileEntry.Remote -> stack.add(NavSeg(entry.fullPath))
+            !isRemote && entry is FileEntry.Local -> stack.add(NavSeg(entry.absolutePath))
+            else -> return
         }
         loadCurrent()
     }
 
     private fun goUp() {
-        if (navStack.size > 1) {
-            navStack.removeAt(navStack.size - 1)
+        val stack = currentStack()
+        if (stack.size > 1) {
+            stack.removeAt(stack.size - 1)
             loadCurrent()
         }
     }
