@@ -16,17 +16,16 @@ object AnrWatchdog {
     private var watchdogThread: Thread? = null
     @Volatile private var running = false
     private var appContext: Context? = null
+    private var hasDumped = false // 🔥 Hanya dump SEKALI agar tidak memperparah ANR
 
     fun start(context: Context) {
         if (running) return
         running = true
         appContext = context.applicationContext
 
-        // ✅ PERBAIKAN: Gunakan Runnable dan nama Thread dengan benar
         val thread = Thread({
             val mainHandler = Handler(Looper.getMainLooper())
             var lastTick = 0L
-            var lastDump = 0L
 
             while (running) {
                 val startTick = lastTick
@@ -35,12 +34,9 @@ object AnrWatchdog {
                     Thread.sleep(INTERVAL_MS)
                 } catch (_: InterruptedException) { break }
 
-                if (lastTick == startTick) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastDump > ANR_THRESHOLD_MS) {
-                        writeAnrDump()
-                        lastDump = now
-                    }
+                if (lastTick == startTick && !hasDumped) {
+                    writeAnrDump()
+                    hasDumped = true // Matikan dump setelah sekali agar tidak bikin makin macet
                 }
             }
         }, "AnrWatchdog")
@@ -56,21 +52,10 @@ object AnrWatchdog {
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
 
         val dump = buildString {
-            append("\n\n═══════════════════════════════════════════════════════════\n")
-            append("==== ANR DETECTED: $timestamp ====\n")
-            append("═══════════════════════════════════════════════════════════\n")
-
+            append("\n==== ANR DETECTED: $timestamp ====\n")
             val mainThread = Looper.getMainLooper().thread
-            append("\n>>> MAIN THREAD (state=${mainThread.state}) <<<\n")
+            append(">>> MAIN THREAD (state=${mainThread.state}) <<<\n")
             mainThread.stackTrace.forEach { append("  at $it\n") }
-
-            append("\n>>> ALL OTHER THREADS <<<\n")
-            Thread.getAllStackTraces().forEach { (t, stack) ->
-                if (t != mainThread) {
-                    append("\n--- ${t.name} (state=${t.state}) ---\n")
-                    stack.forEach { append("  at $it\n") }
-                }
-            }
         }
 
         try {

@@ -39,7 +39,7 @@ class LocalFileManager {
                 }?.sortedWith(compareBy({ !it.isDir }, { it.name.lowercase() })) ?: emptyList()
                 
                 // BATASI MAKSIMAL 300 ITEM
-                files.take(300)
+                files.take(100)
             } catch (_: Throwable) { emptyList() }
         }
         result ?: emptyList()

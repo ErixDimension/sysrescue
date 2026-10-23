@@ -23,9 +23,7 @@ class BrowserActivity : AppCompatActivity() {
             }
         }
         
-        // 🔥 KUNCI PERFORMA: Cegah fragment dihancurkan & dibuat ulang saat pindah tab
-        b.pager.offscreenPageLimit = 1
-        
+        // Jangan pakai offscreenPageLimit = 1, biarkan fragment dimuat saat tab dibuka saja
         TabLayoutMediator(b.tabs, b.pager) { tab, pos ->
             tab.text = if (pos == 0) "📱 LOCAL" else "🔧 REMOTE"
         }.attach()

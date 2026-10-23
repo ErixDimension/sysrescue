@@ -1,7 +1,6 @@
 package com.terangbulan.sysrescue.ui
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -15,32 +14,31 @@ class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : ListAdapter<
 
     companion object {
         private val DIFF = object : DiffUtil.ItemCallback<FileEntry>() {
-            override fun areItemsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean {
-                return oldItem.name == newItem.name
-            }
-            override fun areContentsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean {
-                return oldItem == newItem
-            }
+            override fun areItemsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean = oldItem.name == newItem.name
+            override fun areContentsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean = oldItem == newItem
         }
+        
+        // Icon sederhana (pakai emoji sudah ter-cache di memory)
+        private val ICON_FOLDER = "📁 "
+        private val ICON_FILE = "📄 "
     }
 
-    inner class VH(v: View) : RecyclerView.ViewHolder(v) {
-        val root: View = v.findViewById(R.id.rowRoot)
-        val icon: TextView = v.findViewById(R.id.tvIcon)
-        val name: TextView = v.findViewById(R.id.tvName)
-        val size: TextView = v.findViewById(R.id.tvSize)
+    inner class VH(v: TextView) : RecyclerView.ViewHolder(v) {
+        val tv: TextView = v
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        return VH(LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false))
+        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false) as TextView
+        return VH(v)
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val entry = getItem(position)
-        holder.icon.text = if (entry.isDir) "📁" else "📄"
-        holder.name.text = entry.name
-        holder.size.text = if (entry.isDir) "Folder" else FormatUtil.formatBytes(entry.size)
-        holder.root.setOnClickListener {
+        val icon = if (entry.isDir) ICON_FOLDER else ICON_FILE
+        val size = if (entry.isDir) "" else " — ${FormatUtil.formatBytes(entry.size)}"
+        holder.tv.text = "$icon${entry.name}$size"
+        
+        holder.tv.setOnClickListener {
             if (entry.isDir) onFolderClick(entry)
         }
     }

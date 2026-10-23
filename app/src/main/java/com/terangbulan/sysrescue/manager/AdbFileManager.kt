@@ -38,7 +38,7 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
 
         // BATASI MAKSIMAL 300 ITEM AGAR UI TIDAK ANR
-        parsed.take(300)
+        parsed.take(100)
     }
 
     private fun parseLsLine(line: String, parentPath: String): FileEntry.Remote? {
