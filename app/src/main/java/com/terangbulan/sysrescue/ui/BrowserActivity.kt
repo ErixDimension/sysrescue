@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -15,12 +16,15 @@ import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.manager.AdbFileManager
 import com.terangbulan.sysrescue.manager.LocalFileManager
+import com.terangbulan.sysrescue.util.FileCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class BrowserActivity : Activity() {
@@ -29,20 +33,19 @@ class BrowserActivity : Activity() {
 
     private lateinit var listView: ListView
     private lateinit var tvPath: TextView
-    private lateinit var tvMode: TextView
+    private lateinit var tvStatus: TextView // Live connection status
     private lateinit var adapter: FileAdapter
 
     private val localMgr = LocalFileManager()
     private var adbMgr: AdbFileManager? = null
     private var isRemote = false
 
-    // 🎯 Dua stack terpisah: masing-masing ingat posisinya sendiri
     private data class NavSeg(val path: String)
-    private val localStack = mutableListOf<NavSeg>()
-    private val remoteStack = mutableListOf<NavSeg>()
+    private val localStack = mutableListOf(NavSeg(localMgr.rootPath()))
+    private val remoteStack = mutableListOf(NavSeg("/sdcard"))
 
-    private fun currentStack(): MutableList<NavSeg> = if (isRemote) remoteStack else localStack
-    private fun currentPath(): String = currentStack().last().path
+    private fun currentStack() = if (isRemote) remoteStack else localStack
+    private fun currentPath() = currentStack().last().path
 
     private fun dp(dp: Int): Int = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics
@@ -57,7 +60,19 @@ class BrowserActivity : Activity() {
             setBackgroundColor(Color.parseColor("#0B0F14"))
         }
 
-        // Top bar: tombol ↑ + path + label mode
+        // 1. Live Connection Status Bar (Paling atas)
+        tvStatus = TextView(this).apply {
+            text = "Menunggu koneksi..."
+            setTextColor(Color.YELLOW)
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(4))
+            setBackgroundColor(Color.parseColor("#111820"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        root.addView(tvStatus)
+
+        // 2. Top bar (↑ + Path)
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -74,7 +89,7 @@ class BrowserActivity : Activity() {
         }
 
         tvPath = TextView(this).apply {
-            text = "/"
+            text = currentPath()
             setTextColor(Color.parseColor("#00E5FF"))
             textSize = 12f
             typeface = Typeface.MONOSPACE
@@ -89,12 +104,11 @@ class BrowserActivity : Activity() {
         topBar.addView(tvPath)
         root.addView(topBar)
 
-        // Switch bar
+        // 3. Switch bar (LOCAL / REMOTE)
         val switchBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             setPadding(dp(8), dp(4), dp(8), dp(4))
-            gravity = Gravity.CENTER_VERTICAL
         }
 
         val btnLocal = Button(this).apply {
@@ -109,19 +123,11 @@ class BrowserActivity : Activity() {
             setOnClickListener { switchTo(true) }
         }
 
-        tvMode = TextView(this).apply {
-            text = "LOCAL"
-            setTextColor(Color.WHITE)
-            textSize = 11f
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(64), dp(44))
-        }
-
         switchBar.addView(btnLocal)
         switchBar.addView(btnRemote)
         root.addView(switchBar)
 
-        // ListView
+        // 4. ListView
         listView = ListView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
@@ -132,36 +138,59 @@ class BrowserActivity : Activity() {
         adapter = FileAdapter { entry -> enterFolder(entry) }
         listView.adapter = adapter
 
-        // 🎯 Init: dua stack mulai dari posisi default masing-masing
-        localStack.add(NavSeg(localMgr.rootPath()))
-        remoteStack.add(NavSeg("/sdcard"))
-
+        // Panggil fungsi cek koneksi realtime
+        startConnectionMonitor()
+        
+        // Load awal
         loadCurrent()
+    }
+
+    // 🔄 Fitur Koneksi Live: Memantau koneksi setiap 1 detik
+    private fun startConnectionMonitor() {
+        scope.launch {
+            while (isActive) {
+                val connected = AdbDeviceWatcher.transport?.isConnected == true
+                
+                if (isRemote) {
+                    if (connected) {
+                        tvStatus.text = "🟢 Remote Terhubung"
+                        tvStatus.setTextColor(Color.GREEN)
+                    } else {
+                        tvStatus.text = "🔴 Remote Terputus (Menampilkan Cache)"
+                        tvStatus.setTextColor(Color.RED)
+                    }
+                } else {
+                    tvStatus.text = "📱 Local Mode"
+                    tvStatus.setTextColor(Color.parseColor("#00E5FF"))
+                }
+                delay(1000)
+            }
+        }
     }
 
     private fun switchTo(remote: Boolean) {
         if (isRemote == remote) return
         isRemote = remote
-        // Update label mode
-        tvMode.text = if (remote) "REMOTE" else "LOCAL"
-        tvMode.setTextColor(if (remote) Color.parseColor("#FFA726") else Color.parseColor("#66BB6A"))
-        // Load posisi terakhir dari stack yang sesuai (tidak reset!)
+        // UI Langsung berubah tanpa hapus layar
         loadCurrent()
     }
 
     private fun loadCurrent() {
         val path = currentPath()
         val pathLabel = if (isRemote) "[B] $path" else "[A] $path"
-        
-        // 🔥 Update path SECARA SYNCHRONOUS (sebelum coroutine) — efek realtime!
         tvPath.text = pathLabel
-        
+
+        // 🔥 CACHE: Jika ada data di cache, tampilkan dulu (instan)
+        val cached = FileCache.get(pathLabel)
+        if (cached != null) {
+            adapter.setItems(cached)
+        } else if (isRemote && AdbDeviceWatcher.transport?.isConnected != true) {
+            // Jika remote tapi tidak ada koneksi, biarkan kosong atau tampilkan pesan
+            adapter.setItems(emptyList())
+        }
+
         loadJob?.cancel()
         loadJob = scope.launch {
-            // 🔥 Kosongkan list seketika sebagai tanda sedang loading
-            adapter.setItems(emptyList())
-            listView.setSelection(0)
-
             val list: List<FileEntry> = try {
                 if (isRemote) {
                     val t = AdbDeviceWatcher.transport
@@ -178,8 +207,11 @@ class BrowserActivity : Activity() {
                 emptyList()
             }
             
-            adapter.setItems(list)
-            listView.setSelection(0)
+            // Jika berhasil dapat data, simpan ke cache
+            if (list.isNotEmpty() || (isRemote && AdbDeviceWatcher.transport?.isConnected == true)) {
+                FileCache.put(pathLabel, list)
+                adapter.setItems(list)
+            }
         }
     }
 
