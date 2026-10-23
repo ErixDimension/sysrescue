@@ -11,6 +11,7 @@ import com.tananaev.adblib.AdbBase64
 import com.tananaev.adblib.AdbConnection
 import com.tananaev.adblib.AdbCrypto
 import com.tananaev.adblib.AdbStream
+import kotlinx.coroutines.*
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -33,11 +34,9 @@ class AdbLibUsbTransport(
         fun hasAdb(device: UsbDevice): Boolean = findAdbInterface(device) != null
 
         private fun findAdbInterface(device: UsbDevice): UsbInterface? =
-            (0 until device.interfaceCount)
-                .map { device.getInterface(it) }
-                .firstOrNull {
-                    it.interfaceClass == ADB_CLASS && it.interfaceSubclass == ADB_SUBCLASS && it.interfaceProtocol == ADB_PROTOCOL
-                }
+            (0 until device.interfaceCount).map { device.getInterface(it) }.firstOrNull {
+                it.interfaceClass == ADB_CLASS && it.interfaceSubclass == ADB_SUBCLASS && it.interfaceProtocol == ADB_PROTOCOL
+            }
 
         private val ADB_BASE64 = object : AdbBase64 {
             override fun encodeToString(data: ByteArray): String = android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP)
@@ -134,14 +133,29 @@ class AdbLibUsbTransport(
         } finally { runCatching { stream.close() } }
     }
 
+    // 🔥 HARD TIMEOUT KEMBALI: Mencegah stream menggantung dan memenuhi memori HP B
     fun exec(command: String): String {
         val ac = adbConn ?: error("ADB belum terhubung")
         val stream = ac.open("shell:$command")
         val result = StringBuilder()
+        var isStreamClosed = false
+
         try {
-            while (true) {
-                val chunk = try { stream.read() } catch (e: IOException) { break }
-                result.append(String(chunk, Charsets.UTF_8))
+            val readJob = CoroutineScope(Dispatchers.IO).launch {
+                while (true) {
+                    val chunk = try { stream.read() } catch (e: IOException) { break }
+                    result.append(String(chunk, Charsets.UTF_8))
+                }
+                isStreamClosed = true
+            }
+
+            // Tunggu maksimal 8 detik
+            runBlocking { withTimeoutOrNull(8000L) { readJob.join() } }
+
+            // Jika 8 detik belum selesai, paksa tutup stream agar koneksi lepas
+            if (!isStreamClosed) {
+                runCatching { stream.close() }
+                readJob.cancel()
             }
         } finally { 
             runCatching { stream.close() } 
@@ -150,7 +164,6 @@ class AdbLibUsbTransport(
     }
 
     override fun close() {
-        // Jangan pernah panggil ini di Main Thread!
         runCatching { adbConn?.close() }
         adbConn = null; adbCrypto = null
         runCatching { connection?.close() }

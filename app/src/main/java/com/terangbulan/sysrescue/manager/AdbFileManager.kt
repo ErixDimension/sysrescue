@@ -29,30 +29,25 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         val pathWithSlash = if (normalized.endsWith("/")) normalized else "$normalized/"
         val safePath = shellQuote(pathWithSlash)
         
-        // 🔥 PERINTAH BARU: Persis seperti terminal manual (cd && ls -la)
-        val cmd = "cd $safePath && ls -la"
+        // KEMBALIKAN KE PERINTAH YANG TERBUKTI STABIL
+        val cmd = "ls -la $safePath 2>/dev/null"
         
         val out = try {
             transport.exec(cmd)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            DebugLogger.log("[R] Gagal eksekusi: ${e.message}")
             return@withContext emptyList()
         }
 
-        if (out.isBlank()) {
-            DebugLogger.log("[R] Output kosong dari $normalized")
-            return@withContext emptyList()
-        }
+        if (out.isBlank()) return@withContext emptyList()
 
         val lines = out.lines().map { stripAnsi(it) }.filter { it.isNotBlank() }
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
 
-        if (parsed.isEmpty()) {
-            // Jika gagal parse padahal ada output, log 5 baris pertamanya
-            val sample = lines.take(5).joinToString("\n")
-            DebugLogger.log("[R] Gagal parse. Output mentah:\n$sample")
+        // Log jika parsing gagal
+        if (parsed.isEmpty() && lines.size > 1) {
+            DebugLogger.log("[R] Gagal parse. Sample:\n${lines.take(2).joinToString("\n")}")
         }
 
         parsed.take(100)
@@ -67,7 +62,6 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         val parts = t.split(Regex("\\s+"))
         if (parts.size < 7) return null
         
-        // Cari index nama file. Biasanya setelah format tanggal (HH:MM atau YYYY)
         var nameStartIdx = -1
         for (i in parts.indices.reversed()) {
             if (parts[i].matches(Regex("^\\d{4}$")) || parts[i].matches(Regex("^\\d{1,2}:\\d{2}$"))) {
@@ -79,7 +73,7 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         if (nameStartIdx < 0 || nameStartIdx >= parts.size) return null
 
         var name = parts.drop(nameStartIdx).joinToString(" ")
-        name = name.replace(Regex("\\\\(.)"), "$1") // Hapus backslash escaping
+        name = name.replace(Regex("\\\\(.)"), "$1")
         if (name == "." || name == "..") return null
 
         val sizeStr = parts.getOrNull(nameStartIdx - 2) ?: "0"

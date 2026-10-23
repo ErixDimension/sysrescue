@@ -4,7 +4,10 @@ import android.content.Context
 import android.hardware.usb.UsbDevice
 import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -20,12 +23,13 @@ class AdbUsbTransport(
 
     companion object {
         fun hasAdb(device: UsbDevice): Boolean = AdbLibUsbTransport.hasAdb(device)
-        private const val EXEC_TIMEOUT_MS = 20000L // 20 detik agar aman untuk folder besar
-        private const val PUSH_PULL_TIMEOUT_MS = 120000L
+        private const val EXEC_TIMEOUT_MS = 15000L // Naikkan jadi 15 detik
+        private const val PUSH_PULL_TIMEOUT_MS = 60000L
     }
 
     private var lib: AdbLibUsbTransport? = null
     private val ioMutex = Mutex()
+    @Volatile private var isReconnecting = false
 
     val isConnected: Boolean get() = lib?.isConnected == true
 
@@ -43,6 +47,33 @@ class AdbUsbTransport(
                     lib = null
                     DebugLogger.log("❌ AdbLib connect: ${r.exceptionOrNull()?.message}")
                 }
+            }
+        }
+    }
+
+    // 🔥 AUTO RECONNECT: Jika koneksi mati, sambung ulang di background
+    private fun triggerReconnect() {
+        if (isReconnecting) return
+        isReconnecting = true
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                DebugLogger.log("🔄 Mencoba menyambung ulang ADB...")
+                runCatching { lib?.close() }
+                lib = null
+                delay(1000) // Beri jeda 1 detik agar USB bersih
+                
+                ioMutex.withLock {
+                    val t = AdbLibUsbTransport(context, usbDevice)
+                    t.connect()
+                    lib = t
+                    DebugLogger.log("✅ Auto-reconnect BERHASIL")
+                    DebugLogger.setStatus("✓ ADB Terhubung")
+                }
+            } catch (e: Throwable) {
+                DebugLogger.log("❌ Auto-reconnect GAGAL: ${e.message}")
+                DebugLogger.setStatus("❌ ADB terputus")
+            } finally {
+                isReconnecting = false
             }
         }
     }
@@ -74,13 +105,19 @@ class AdbUsbTransport(
             val res = withTimeoutOrNull(EXEC_TIMEOUT_MS) {
                 ioMutex.withLock { t.exec(command) }
             }
-            // Jika timeout, JANGAN tutup koneksi. Hanya lemparkan error ke UI.
-            res ?: throw IOException("Timeout membaca folder (20 detik)")
+            res ?: throw IOException("Timeout membaca folder")
         } catch (e: CancellationException) {
-            // Jangan log jika ini hanya pembatalan (user pindah folder cepat)
-            throw e 
+            throw e // Abaikan pembatalan biasa
         } catch (e: Exception) {
             DebugLogger.log("⚠️ Exec error: ${e.message}")
+            
+            // Jika error karena stream ditolak atau koneksi mati, picu Reconnect
+            val msg = e.message ?: ""
+            if (msg.contains("connect() must be called first") || 
+                msg.contains("Stream open actively rejected") ||
+                msg.contains("ADB terputus")) {
+                triggerReconnect()
+            }
             throw e
         }
     }
@@ -88,7 +125,6 @@ class AdbUsbTransport(
     override fun close() {
         val oldLib = lib
         lib = null
-        // Tutup di background agar tidak nge-lag
         Thread { try { oldLib?.close() } catch (_: Throwable) {} }.start()
     }
 }
