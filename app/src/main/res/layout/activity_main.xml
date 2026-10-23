@@ -9,6 +9,11 @@
     <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:text="Menunggu device..." android:textColor="#FFFFFF" android:gravity="center" android:paddingTop="8dp" android:paddingBottom="16dp"/>
         
+    <!-- Tombol Izin Khusus Android 11+ -->
+    <Button android:id="@+id/btnPermission" android:layout_width="match_parent" android:layout_height="48dp"
+        android:text="🔓 Izinkan Akses Semua File" android:textColor="#FFFFFF" android:backgroundTint="#FF5252"
+        android:visibility="gone" android:layout_marginBottom="8dp"/>
+
     <Button android:id="@+id/btnOpenBrowser" android:layout_width="match_parent" android:layout_height="52dp"
         android:text="🌐 Buka Browser" android:textSize="16sp" android:enabled="false" android:layout_marginBottom="8dp"/>
         

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
+    private lateinit var btnPermission: Button
     private lateinit var btnOpenBrowser: Button
     private lateinit var btnClear: Button
     private lateinit var btnCopy: Button
@@ -34,15 +36,19 @@ class MainActivity : AppCompatActivity() {
         AnrWatchdog.start(this)
         setContentView(R.layout.activity_main)
 
-        // Inisialisasi View secara manual
         tvStatus = findViewById(R.id.tvStatus)
         tvLog = findViewById(R.id.tvLog)
+        btnPermission = findViewById(R.id.btnPermission)
         btnOpenBrowser = findViewById(R.id.btnOpenBrowser)
         btnClear = findViewById(R.id.btnClear)
         btnCopy = findViewById(R.id.btnCopy)
 
         AdbDeviceWatcher.start(this)
-        requestAllFilesAccessIfNeeded()
+
+        // Tombol untuk buka pengaturan izin
+        btnPermission.setOnClickListener {
+            requestAllFilesAccess()
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -78,17 +84,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestAllFilesAccessIfNeeded() {
+    override fun onResume() {
+        super.onResume()
+        // Setiap kali aplikasi dibuka kembali, cek apakah izin sudah diberikan
+        checkStoragePermission()
+    }
+
+    private fun checkStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (_: Throwable) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
-                }
+            if (Environment.isExternalStorageManager()) {
+                btnPermission.visibility = View.GONE
+            } else {
+                btnPermission.visibility = View.VISIBLE
+            }
+        } else {
+            btnPermission.visibility = View.GONE
+        }
+    }
+
+    private fun requestAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+            } catch (_: Throwable) {
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                startActivity(intent)
             }
         }
     }
