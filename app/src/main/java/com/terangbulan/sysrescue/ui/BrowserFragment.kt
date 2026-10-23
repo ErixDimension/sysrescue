@@ -12,7 +12,6 @@ import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.databinding.FragmentBrowserBinding
 import com.terangbulan.sysrescue.manager.AdbFileManager
 import com.terangbulan.sysrescue.manager.LocalFileManager
-import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -66,7 +65,8 @@ class BrowserFragment : Fragment() {
             } else {
                 localMgr.list(path)
             }
-            _b?.let { adapter.setItems(list) }
+            // ✅ Perbaikan: Ganti setItems menjadi submitList (ListAdapter)
+            _b?.let { adapter.submitList(list) }
         }
     }
 
