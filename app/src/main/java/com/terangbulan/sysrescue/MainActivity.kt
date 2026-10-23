@@ -17,6 +17,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            try {
+                val f = java.io.File("/storage/emulated/0/sysrescue_crash.txt")
+                f.appendText("\n==== CRASH ${java.util.Date()} (thread=${thread.name}) ====\n")
+                f.appendText(android.util.Log.getStackTraceString(e))
+                f.appendText("\n")
+            } catch (_: Throwable) {}
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
 
