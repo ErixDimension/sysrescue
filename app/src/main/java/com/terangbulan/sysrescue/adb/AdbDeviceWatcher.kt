@@ -1,10 +1,3 @@
-// ═════════════════════════════════════════════════════════════════
-// ⚠️  DO NOT DELETE / DO NOT OVERWRITE — WATCHER USB ADB
-// Sudah terhubung dengan AdbUsbTransport (bukan PTP lagi).
-// Kalau mau eksperimen, buat AdbDeviceWatcher_v2.kt.
-// ═════════════════════════════════════════════════════════════════
-
-
 package com.terangbulan.sysrescue.adb
 
 import android.app.PendingIntent
@@ -13,7 +6,6 @@ import android.hardware.usb.*
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import com.terangbulan.sysrescue.adb.AdbUsbTransport
 import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,7 +69,6 @@ object AdbDeviceWatcher {
             context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         else context.registerReceiver(receiver, filter)
 
-        // Auto-reconnect: cek device yang sudah ter-colok
         scanExistingDevices()
     }
 
@@ -110,14 +101,27 @@ object AdbDeviceWatcher {
                     DebugLogger.log("Device tanpa interface ADB, dilewati")
                     return@launch
                 }
+                
+                // Tutup transport lama jika ada
+                transport?.close()
+                transport = null
+                
                 DebugLogger.log("Membuka koneksi ADB...")
                 DebugLogger.setStatus("Mencari ADB device...")
                 val ctx = appContext ?: throw IllegalStateException("Context null")
                 val t = AdbUsbTransport(ctx, device)
-                transport = t
-                t.connect()
-                DebugLogger.log("✓ ADB TERHUBUNG (${device.deviceName})")
-                DebugLogger.setStatus("✓ ADB Terhubung")
+                
+                // 🔥 CEK HASIL KONEKSI DENGAN BENAR
+                val result = t.connect()
+                if (result.isSuccess) {
+                    transport = t
+                    DebugLogger.log("✓ ADB TERHUBUNG (${device.deviceName})")
+                    DebugLogger.setStatus("✓ ADB Terhubung")
+                } else {
+                    transport = null
+                    DebugLogger.log("❌ Gagal terhubung: ${result.exceptionOrNull()?.message}")
+                    DebugLogger.setStatus("❌ Gagal terhubung")
+                }
             } catch (t: Throwable) {
                 DebugLogger.log("❌ ADB Gagal: ${t.message}")
                 DebugLogger.setStatus("❌ ${t.message}")
@@ -127,11 +131,6 @@ object AdbDeviceWatcher {
         }
     }
 
-    // ──────────────────────────────────────────────────────────
-    // [Fix 2026-10-24] Auto-reconnect: scan device yang sudah ter-colok
-    // saat app start (bukan hanya tunggu broadcast USB_DEVICE_ATTACHED).
-    // Berguna saat app di-kill lalu buka lagi, USB masih ter-colok.
-    // ──────────────────────────────────────────────────────────
     private fun scanExistingDevices() {
         val manager = usbManager ?: return
         val ctx = appContext ?: return

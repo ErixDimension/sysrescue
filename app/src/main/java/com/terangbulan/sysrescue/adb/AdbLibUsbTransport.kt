@@ -86,9 +86,19 @@ class AdbLibUsbTransport(
         val socket = UsbSocket(conn, inEp, outEp)
         val crypto = loadOrCreateCrypto(context)
         adbCrypto = crypto
-        val ac = AdbConnection.create(socket, crypto)
-        adbConn = ac
-        ac.connect()
+        
+        try {
+            val ac = AdbConnection.create(socket, crypto)
+            adbConn = ac
+            ac.connect()
+        } catch (e: Throwable) {
+            // Jika handshake ADB gagal, pastikan koneksi USB ditutup bersih
+            runCatching { adbConn?.close() }
+            adbConn = null
+            runCatching { connection?.close() }
+            connection = null
+            throw e
+        }
     }
 
     fun push(local: File, remotePath: String, onProgress: ((Long, Long) -> Unit)? = null) {
