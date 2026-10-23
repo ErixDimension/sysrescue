@@ -22,7 +22,8 @@ object AnrWatchdog {
         running = true
         appContext = context.applicationContext
 
-        val thread = Thread("AnrWatchdog") {
+        // ✅ PERBAIKAN: Gunakan Runnable dan nama Thread dengan benar
+        val thread = Thread({
             val mainHandler = Handler(Looper.getMainLooper())
             var lastTick = 0L
             var lastDump = 0L
@@ -42,7 +43,7 @@ object AnrWatchdog {
                     }
                 }
             }
-        }
+        }, "AnrWatchdog")
         
         thread.isDaemon = true
         thread.priority = Thread.MAX_PRIORITY
@@ -82,17 +83,6 @@ object AnrWatchdog {
             dir.mkdirs()
             File(dir, LOG_FILENAME).appendText(dump)
         } catch (_: Throwable) {}
-    }
-
-    fun logPath(context: Context): String {
-        val sdcardFile = File("/storage/emulated/0/$LOG_FILENAME")
-        if (sdcardFile.exists()) return sdcardFile.absolutePath
-        val fallbackDir = context.getExternalFilesDir(null)
-        if (fallbackDir != null) {
-            val fallbackFile = File(fallbackDir, LOG_FILENAME)
-            if (fallbackFile.exists()) return fallbackFile.absolutePath
-        }
-        return "belum ada file"
     }
 
     fun stop() {
