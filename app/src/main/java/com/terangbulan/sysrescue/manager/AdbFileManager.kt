@@ -2,7 +2,7 @@ package com.terangbulan.sysrescue.manager
 
 import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.adb.AdbUsbTransport
-import com.terangbulan.sysrescue.util.DebugLogger
+import com.terangbulan.sysrescue.util.ActionLog
 import com.terangbulan.sysrescue.util.PathUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -28,28 +28,27 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         val normalized = resolvePath(path)
         val pathWithSlash = if (normalized.endsWith("/")) normalized else "$normalized/"
         val safePath = shellQuote(pathWithSlash)
-        
-        // KEMBALIKAN KE PERINTAH YANG TERBUKTI STABIL
-        val cmd = "ls -la $safePath 2>/dev/null"
-        
+        val cmd = "cd $safePath && ls -la"
+        ActionLog.logUi("REMOTE:list($normalized)")
         val out = try {
             transport.exec(cmd)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
+            ActionLog.log("LIST FAILED: ${e.message}")
             return@withContext emptyList()
         }
-
-        if (out.isBlank()) return@withContext emptyList()
-
+        if (out.isBlank()) {
+            ActionLog.log("LIST: output kosong untuk $normalized")
+            return@withContext emptyList()
+        }
         val lines = out.lines().map { stripAnsi(it) }.filter { it.isNotBlank() }
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
-
-        // Log jika parsing gagal
         if (parsed.isEmpty() && lines.size > 1) {
-            DebugLogger.log("[R] Gagal parse. Sample:\n${lines.take(2).joinToString("\n")}")
+            ActionLog.log("LIST: gagal parse ${lines.size} baris")
+        } else {
+            ActionLog.log("LIST: ${parsed.size} file di $normalized")
         }
-
         parsed.take(100)
     }
 
@@ -58,10 +57,8 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
         if (t.isEmpty() || t.startsWith("total ")) return null
         val first = t[0]
         if (first != 'd' && first != '-' && first != 'l') return null
-        
         val parts = t.split(Regex("\\s+"))
         if (parts.size < 7) return null
-        
         var nameStartIdx = -1
         for (i in parts.indices.reversed()) {
             if (parts[i].matches(Regex("^\\d{4}$")) || parts[i].matches(Regex("^\\d{1,2}:\\d{2}$"))) {
@@ -69,17 +66,13 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
                 break
             }
         }
-        
         if (nameStartIdx < 0 || nameStartIdx >= parts.size) return null
-
         var name = parts.drop(nameStartIdx).joinToString(" ")
         name = name.replace(Regex("\\\\(.)"), "$1")
         if (name == "." || name == "..") return null
-
         val sizeStr = parts.getOrNull(nameStartIdx - 2) ?: "0"
         val size = sizeStr.toLongOrNull() ?: 0L
         val isDir = first == 'd'
-
         val fullPath = if (parentPath == "/") "/$name" else "$parentPath/$name"
         return FileEntry.Remote(name, fullPath, parentPath, size, isDir)
     }

@@ -16,7 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.ui.BrowserActivity
-import com.terangbulan.sysrescue.util.AnrWatchdog
+import com.terangbulan.sysrescue.util.ActionLog
 import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,23 +26,23 @@ import kotlinx.coroutines.launch
 
 class MainActivity : Activity() {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
     private lateinit var btnPermission: Button
     private lateinit var btnOpenBrowser: Button
+    private lateinit var btnSaveLog: Button
     private lateinit var btnClear: Button
     private lateinit var btnCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AnrWatchdog.start(this)
         setContentView(R.layout.activity_main)
 
         tvStatus = findViewById(R.id.tvStatus)
         tvLog = findViewById(R.id.tvLog)
         btnPermission = findViewById(R.id.btnPermission)
         btnOpenBrowser = findViewById(R.id.btnOpenBrowser)
+        btnSaveLog = findViewById(R.id.btnSaveLog)
         btnClear = findViewById(R.id.btnClear)
         btnCopy = findViewById(R.id.btnCopy)
 
@@ -65,7 +65,16 @@ class MainActivity : Activity() {
         }
 
         btnOpenBrowser.setOnClickListener {
+            ActionLog.logUi("OPEN BROWSER")
             startActivity(Intent(this, BrowserActivity::class.java))
+        }
+
+        btnSaveLog.setOnClickListener {
+            if (ActionLog.flush(this)) {
+                Toast.makeText(this, "Log disimpan ke /sdcard/sysrescue_log.txt", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Gagal simpan log (izin?)", Toast.LENGTH_LONG).show()
+            }
         }
 
         btnClear.setOnClickListener { DebugLogger.clear() }
@@ -83,6 +92,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         checkStoragePermission()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        ActionLog.flush(this)
     }
 
     override fun onDestroy() {

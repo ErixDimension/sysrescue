@@ -15,6 +15,7 @@ import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.manager.AdbFileManager
 import com.terangbulan.sysrescue.manager.LocalFileManager
+import com.terangbulan.sysrescue.util.ActionLog
 import com.terangbulan.sysrescue.util.FileCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -166,6 +167,7 @@ class BrowserActivity : Activity() {
     private fun switchTo(remote: Boolean) {
         if (isRemote == remote) return
         isRemote = remote
+        ActionLog.logUi("SWITCH: ${if (remote) "REMOTE" else "LOCAL"}")
         loadCurrent()
     }
 
@@ -207,6 +209,7 @@ class BrowserActivity : Activity() {
     }
 
     private fun enterFolder(entry: FileEntry) {
+        ActionLog.logUi("ENTER: ${entry.name}")
         val stack = currentStack()
         when {
             isRemote && entry is FileEntry.Remote -> stack.add(NavSeg(entry.fullPath))
@@ -217,11 +220,17 @@ class BrowserActivity : Activity() {
     }
 
     private fun goUp() {
+        ActionLog.logUi("UP")
         val stack = currentStack()
         if (stack.size > 1) {
             stack.removeAt(stack.size - 1)
             loadCurrent()
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        ActionLog.flush(this)
     }
 
     override fun onDestroy() {

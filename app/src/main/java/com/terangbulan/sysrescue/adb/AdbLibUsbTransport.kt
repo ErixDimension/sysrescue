@@ -59,6 +59,7 @@ class AdbLibUsbTransport(
     }
 
     private var connection: UsbDeviceConnection? = null
+    private var claimedInterface: UsbInterface? = null
     private var adbConn: AdbConnection? = null
     var adbCrypto: AdbCrypto? = null
 
@@ -83,20 +84,18 @@ class AdbLibUsbTransport(
         val conn = usbManager.openDevice(usbDevice) ?: throw IllegalStateException("openDevice gagal")
         if (!conn.claimInterface(intf, true)) { conn.close(); throw IllegalStateException("Gagal claim interface ADB") }
         connection = conn
+        claimedInterface = intf
         val socket = UsbSocket(conn, inEp, outEp)
         val crypto = loadOrCreateCrypto(context)
         adbCrypto = crypto
-        
         try {
             val ac = AdbConnection.create(socket, crypto)
             adbConn = ac
             ac.connect()
         } catch (e: Throwable) {
-            // Jika handshake ADB gagal, pastikan koneksi USB ditutup bersih
             runCatching { adbConn?.close() }
             adbConn = null
-            runCatching { connection?.close() }
-            connection = null
+            releaseUsb()
             throw e
         }
     }
@@ -143,13 +142,11 @@ class AdbLibUsbTransport(
         } finally { runCatching { stream.close() } }
     }
 
-    // 🔥 HARD TIMEOUT KEMBALI: Mencegah stream menggantung dan memenuhi memori HP B
     fun exec(command: String): String {
         val ac = adbConn ?: error("ADB belum terhubung")
         val stream = ac.open("shell:$command")
         val result = StringBuilder()
         var isStreamClosed = false
-
         try {
             val readJob = CoroutineScope(Dispatchers.IO).launch {
                 while (true) {
@@ -158,26 +155,28 @@ class AdbLibUsbTransport(
                 }
                 isStreamClosed = true
             }
-
-            // Tunggu maksimal 8 detik
             runBlocking { withTimeoutOrNull(8000L) { readJob.join() } }
-
-            // Jika 8 detik belum selesai, paksa tutup stream agar koneksi lepas
             if (!isStreamClosed) {
                 runCatching { stream.close() }
                 readJob.cancel()
             }
-        } finally { 
-            runCatching { stream.close() } 
-        }
+        } finally { runCatching { stream.close() } }
         return result.toString()
+    }
+
+    private fun releaseUsb() {
+        runCatching {
+            claimedInterface?.let { intf -> connection?.releaseInterface(intf) }
+        }
+        claimedInterface = null
+        runCatching { connection?.close() }
+        connection = null
     }
 
     override fun close() {
         runCatching { adbConn?.close() }
         adbConn = null; adbCrypto = null
-        runCatching { connection?.close() }
-        connection = null
+        releaseUsb()
     }
 }
 
