@@ -25,7 +25,6 @@ class AdbLibUsbTransport(
 ) : Closeable {
 
     companion object {
-        private const val TIMEOUT_MS = 15000
         private const val CHUNK = 16 * 1024
         private const val PROGRESS_INTERVAL_BYTES = 64L * 1024
         private const val ADB_CLASS = 0xFF
@@ -38,14 +37,11 @@ class AdbLibUsbTransport(
             (0 until device.interfaceCount)
                 .map { device.getInterface(it) }
                 .firstOrNull {
-                    it.interfaceClass == ADB_CLASS &&
-                        it.interfaceSubclass == ADB_SUBCLASS &&
-                        it.interfaceProtocol == ADB_PROTOCOL
+                    it.interfaceClass == ADB_CLASS && it.interfaceSubclass == ADB_SUBCLASS && it.interfaceProtocol == ADB_PROTOCOL
                 }
 
         private val ADB_BASE64 = object : AdbBase64 {
-            override fun encodeToString(data: ByteArray): String =
-                android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP)
+            override fun encodeToString(data: ByteArray): String = android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP)
         }
 
         private fun loadOrCreateCrypto(context: Context): AdbCrypto {
@@ -53,9 +49,7 @@ class AdbLibUsbTransport(
             val priv = File(dir, "priv.key")
             val pub  = File(dir, "pub.key")
             return if (priv.exists() && pub.exists()) {
-                try {
-                    AdbCrypto.loadAdbKeyPair(ADB_BASE64, priv, pub)
-                } catch (t: Throwable) {
+                try { AdbCrypto.loadAdbKeyPair(ADB_BASE64, priv, pub) } catch (t: Throwable) {
                     priv.delete(); pub.delete()
                     AdbCrypto.generateAdbKeyPair(ADB_BASE64).also { it.saveAdbKeyPair(priv, pub) }
                 }
@@ -63,13 +57,12 @@ class AdbLibUsbTransport(
                 AdbCrypto.generateAdbKeyPair(ADB_BASE64).also { it.saveAdbKeyPair(priv, pub) }
             }
         }
-
         private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
     }
 
     private var connection: UsbDeviceConnection? = null
     private var adbConn: AdbConnection? = null
-    private var adbCrypto: AdbCrypto? = null
+    var adbCrypto: AdbCrypto? = null
 
     val isConnected: Boolean get() = adbConn != null
 
@@ -90,29 +83,22 @@ class AdbLibUsbTransport(
         val outEp = epOut ?: throw IllegalStateException("Endpoint OUT tidak ada")
         val usbManager = context.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
         val conn = usbManager.openDevice(usbDevice) ?: throw IllegalStateException("openDevice gagal")
-        if (!conn.claimInterface(intf, true)) {
-            conn.close(); throw IllegalStateException("Gagal claim interface ADB")
-        }
+        if (!conn.claimInterface(intf, true)) { conn.close(); throw IllegalStateException("Gagal claim interface ADB") }
         connection = conn
         val socket = UsbSocket(conn, inEp, outEp)
         val crypto = loadOrCreateCrypto(context)
         adbCrypto = crypto
         val ac = AdbConnection.create(socket, crypto)
         adbConn = ac
-        DebugLogger.log("Menunggu otorisasi ADB...")
         ac.connect()
-        DebugLogger.log("✓ AdbConnection tersambung")
     }
 
     fun push(local: File, remotePath: String, onProgress: ((Long, Long) -> Unit)? = null) {
         val ac = adbConn ?: error("ADB belum terhubung")
-        require(local.exists()) { "File tidak ada: $local" }
         val total = local.length()
-        val dest = shellQuote(remotePath)
-        val stream: AdbStream = ac.open("shell:cat > $dest")
+        val stream: AdbStream = ac.open("shell:cat > ${shellQuote(remotePath)}")
         try {
-            var sent = 0L
-            var lastReport = 0L
+            var sent = 0L; var lastReport = 0L
             local.inputStream().use { input ->
                 val buf = ByteArray(CHUNK)
                 while (true) {
@@ -121,50 +107,39 @@ class AdbLibUsbTransport(
                     stream.write(buf.copyOf(n))
                     sent += n
                     if (onProgress != null && (sent - lastReport >= PROGRESS_INTERVAL_BYTES || sent == total)) {
-                        onProgress(sent, total)
-                        lastReport = sent
+                        onProgress(sent, total); lastReport = sent
                     }
                 }
             }
             onProgress?.invoke(total, total)
-        } finally {
-            runCatching { stream.close() }
-        }
+        } finally { runCatching { stream.close() } }
     }
 
     fun pull(remotePath: String, local: File, expectedSize: Long = 0L, onProgress: ((Long, Long) -> Unit)? = null) {
         val ac = adbConn ?: error("ADB belum terhubung")
         local.parentFile?.mkdirs()
-        val src = shellQuote(remotePath)
-        val stream: AdbStream = ac.open("shell:cat $src")
+        val stream: AdbStream = ac.open("shell:cat ${shellQuote(remotePath)}")
         try {
-            var received = 0L
-            var lastReport = 0L
+            var received = 0L; var lastReport = 0L
             local.outputStream().use { out ->
                 while (true) {
                     val chunk = try { stream.read() } catch (e: IOException) { break }
                     out.write(chunk)
                     received += chunk.size
                     if (onProgress != null && (received - lastReport >= PROGRESS_INTERVAL_BYTES || (expectedSize > 0 && received >= expectedSize))) {
-                        onProgress(received, expectedSize)
-                        lastReport = received
+                        onProgress(received, expectedSize); lastReport = received
                     }
                 }
             }
             onProgress?.invoke(received, expectedSize)
-        } finally {
-            runCatching { stream.close() }
-        }
+        } finally { runCatching { stream.close() } }
     }
 
-    // 🔥 exec() dengan hard timeout agar tidak hang saat folder lambat dibaca
     fun exec(command: String): String {
         val ac = adbConn ?: error("ADB belum terhubung")
         val stream = ac.open("shell:$command")
-        
         val result = StringBuilder()
         var isStreamClosed = false
-
         try {
             val readJob = CoroutineScope(Dispatchers.IO).launch {
                 while (true) {
@@ -173,26 +148,19 @@ class AdbLibUsbTransport(
                 }
                 isStreamClosed = true
             }
-
-            runBlocking {
-                withTimeoutOrNull(8000L) { readJob.join() }
-            }
-
+            runBlocking { withTimeoutOrNull(8000L) { readJob.join() } }
             if (!isStreamClosed) {
                 DebugLogger.log("⚠️ exec() timeout! Memaksa menutup stream.")
                 runCatching { stream.close() }
                 readJob.cancel()
             }
-        } finally {
-            runCatching { stream.close() }
-        }
+        } finally { runCatching { stream.close() } }
         return result.toString()
     }
 
     override fun close() {
         runCatching { adbConn?.close() }
-        adbConn = null
-        adbCrypto = null
+        adbConn = null; adbCrypto = null
         runCatching { connection?.close() }
         connection = null
     }
