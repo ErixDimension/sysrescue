@@ -26,7 +26,7 @@ class LocalFileManager {
 
         val result = withTimeoutOrNull(TIMEOUT_MS) {
             try {
-                dir.listFiles()?.mapNotNull { f ->
+                val files = dir.listFiles()?.mapNotNull { f ->
                     try {
                         if (f == null) null
                         else FileEntry.Local(
@@ -37,6 +37,9 @@ class LocalFileManager {
                         )
                     } catch (_: Throwable) { null }
                 }?.sortedWith(compareBy({ !it.isDir }, { it.name.lowercase() })) ?: emptyList()
+                
+                // BATASI MAKSIMAL 300 ITEM
+                files.take(300)
             } catch (_: Throwable) { emptyList() }
         }
         result ?: emptyList()

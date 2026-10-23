@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.StrictMode
 import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -25,25 +24,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Aktifkan StrictMode (deteksi disk I/O di main thread — penyebab tersembunyi ANR)
-        StrictMode.setThreadPolicy(
-            StrictMode.ThreadPolicy.Builder()
-                .detectDiskReads()
-                .detectDiskWrites()
-                .detectCustomSlowCalls()
-                .penaltyLog()
-                .build()
-        )
-
-        // 2. Start ANR Watchdog SEBELUM load UI berat
         AnrWatchdog.start(this)
-
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
 
         AdbDeviceWatcher.start(this)
-
-        // 3. Request All Files Access (untuk simpan crash log ke /sdcard/)
         requestAllFilesAccessIfNeeded()
 
         lifecycleScope.launch {
@@ -67,11 +52,6 @@ class MainActivity : AppCompatActivity() {
                     val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
                     intent.data = Uri.parse("package:$packageName")
                     startActivity(intent)
-                    Toast.makeText(
-                        this,
-                        "Izinkan akses file untuk simpan crash log di /sdcard/",
-                        Toast.LENGTH_LONG
-                    ).show()
                 } catch (_: Throwable) {
                     val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                     startActivity(intent)

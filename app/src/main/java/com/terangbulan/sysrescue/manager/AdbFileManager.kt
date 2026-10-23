@@ -29,23 +29,16 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
             transport.exec("ls -la --color=never ${shellQuote(normalized)}/ 2>/dev/null")
         } catch (e: Throwable) {
             DebugLogger.log("[R] exec error: ${e.message}")
-            return@withContext emptyList()  // Jangan crash, return empty
-        }
-
-        if (out.isBlank()) {
-            DebugLogger.log("[R] empty output untuk $normalized")
             return@withContext emptyList()
         }
+
+        if (out.isBlank()) return@withContext emptyList()
 
         val lines = out.lines().map { stripAnsi(it) }.filter { it.isNotBlank() }
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
 
-        if (parsed.isEmpty() && lines.isNotEmpty()) {
-            DebugLogger.log("[R] parsed 0 dari ${lines.size} baris — output tidak sesuai format ls")
-        } else {
-            DebugLogger.log("[R] ${parsed.size} item di $normalized")
-        }
-        parsed
+        // BATASI MAKSIMAL 300 ITEM AGAR UI TIDAK ANR
+        parsed.take(300)
     }
 
     private fun parseLsLine(line: String, parentPath: String): FileEntry.Remote? {
