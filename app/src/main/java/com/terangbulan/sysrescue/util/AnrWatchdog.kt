@@ -8,17 +8,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * AnrWatchdog — mendeteksi ANR (Application Not Responding) otomatis.
- *
- * Cara kerja:
- * 1. Setiap 1000ms, watchdog "menyapa" main thread via Handler.post().
- * 2. Jika main thread tidak merespons dalam 3000ms (sebelum sistem ANR 5s),
- *    watchdog dump semua thread stack trace ke file.
- * 3. File ditulis ke /sdcard/ (jika permission) atau fallback Android/data/.
- *
- * Wajib di-start di MainActivity.onCreate() SEBELUM load UI berat.
- */
 object AnrWatchdog {
     private const val INTERVAL_MS = 1000L
     private const val ANR_THRESHOLD_MS = 3000L
@@ -33,7 +22,7 @@ object AnrWatchdog {
         running = true
         appContext = context.applicationContext
 
-        watchdogThread = Thread("AnrWatchdog") {
+        val thread = Thread("AnrWatchdog") {
             val mainHandler = Handler(Looper.getMainLooper())
             var lastTick = 0L
             var lastDump = 0L
@@ -46,7 +35,6 @@ object AnrWatchdog {
                 } catch (_: InterruptedException) { break }
 
                 if (lastTick == startTick) {
-                    // Main thread tidak merespons sejak INTERVAL_MS terakhir
                     val now = System.currentTimeMillis()
                     if (now - lastDump > ANR_THRESHOLD_MS) {
                         writeAnrDump()
@@ -54,11 +42,12 @@ object AnrWatchdog {
                     }
                 }
             }
-        }.apply {
-            isDaemon = true
-            priority = Thread.MAX_PRIORITY
         }
-        watchdogThread?.start()
+        
+        thread.isDaemon = true
+        thread.priority = Thread.MAX_PRIORITY
+        watchdogThread = thread
+        thread.start()
     }
 
     private fun writeAnrDump() {
@@ -83,13 +72,11 @@ object AnrWatchdog {
             }
         }
 
-        // Prioritas 1: /sdcard/ (mudah diakses user)
         try {
             File("/storage/emulated/0/$LOG_FILENAME").appendText(dump)
             return
         } catch (_: Throwable) {}
 
-        // Fallback: app-specific external (tidak butuh permission)
         try {
             val dir = ctx.getExternalFilesDir(null) ?: return
             dir.mkdirs()
@@ -97,7 +84,6 @@ object AnrWatchdog {
         } catch (_: Throwable) {}
     }
 
-    /** Kembalikan path file yang benar-benar bisa dibaca user */
     fun logPath(context: Context): String {
         val sdcardFile = File("/storage/emulated/0/$LOG_FILENAME")
         if (sdcardFile.exists()) return sdcardFile.absolutePath
