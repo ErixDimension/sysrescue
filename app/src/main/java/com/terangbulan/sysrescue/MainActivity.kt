@@ -4,7 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.databinding.ActivityMainBinding
 import com.terangbulan.sysrescue.ui.BrowserActivity
@@ -21,18 +23,22 @@ class MainActivity : AppCompatActivity() {
 
         AdbDeviceWatcher.start(this)
 
-        // Collect Log (dipotong agar tidak ANR)
+        // GUNAKAN repeatOnLifecycle: Log berhenti update saat masuk ke BrowserActivity (Background)
         lifecycleScope.launch {
-            DebugLogger.logs.collect { fullLog ->
-                val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
-                b.tvLog.text = displayLog
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                DebugLogger.logs.collect { fullLog ->
+                    val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
+                    b.tvLog.text = displayLog
+                }
             }
         }
 
         lifecycleScope.launch {
-            DebugLogger.status.collect {
-                b.tvStatus.text = it
-                b.btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                DebugLogger.status.collect {
+                    b.tvStatus.text = it
+                    b.btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true
+                }
             }
         }
 
@@ -42,7 +48,7 @@ class MainActivity : AppCompatActivity() {
             if (text.isNotBlank()) {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Log", text))
-                Toast.makeText(this, "Log dicopy ke clipboard", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Log dicopy", Toast.LENGTH_SHORT).show()
             }
         }
         b.btnOpenBrowser.setOnClickListener {

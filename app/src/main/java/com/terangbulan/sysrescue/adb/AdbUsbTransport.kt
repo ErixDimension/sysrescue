@@ -1,9 +1,3 @@
-// ═════════════════════════════════════════════════════════════════
-// ⚠️  DO NOT DELETE / DO NOT OVERWRITE — WRAPPER API PUBLIK
-// ─────────────────────────────────────────────────────────────────
-// Tanggal : 2026-10-24 (Stage 2c-2 + Mutex fix)
-// ═════════════════════════════════════════════════════════════════
-
 package com.terangbulan.sysrescue.adb
 
 import android.content.Context
@@ -13,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.Closeable
 import java.io.File
 
@@ -53,15 +48,18 @@ class AdbUsbTransport(
         remotePath: String,
         onProgress: ((Long, Long) -> Unit)? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        ioMutex.withLock {
-            runCatching {
-                val t = lib ?: error("ADB terputus")
-                DebugLogger.setStatus("⬆ Push ${local.name}")
-                t.push(local, remotePath, onProgress)
-            }.also { r ->
-                if (r.isFailure) DebugLogger.log("❌ Push: ${r.exceptionOrNull()?.message}")
+        val result = withTimeoutOrNull(30000L) { // 30 detik timeout push
+            ioMutex.withLock {
+                runCatching {
+                    val t = lib ?: error("ADB terputus")
+                    DebugLogger.setStatus("⬆ Push ${local.name}")
+                    t.push(local, remotePath, onProgress)
+                }.also { r ->
+                    if (r.isFailure) DebugLogger.log("❌ Push: ${r.exceptionOrNull()?.message}")
+                }
             }
         }
+        result ?: Result.failure(Exception("Push timeout (30s)"))
     }
 
     suspend fun pull(
@@ -70,22 +68,28 @@ class AdbUsbTransport(
         expectedSize: Long = 0L,
         onProgress: ((Long, Long) -> Unit)? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        ioMutex.withLock {
-            runCatching {
-                val t = lib ?: error("ADB terputus")
-                DebugLogger.setStatus("⬇ Pull ${local.name}")
-                t.pull(remotePath, local, expectedSize, onProgress)
-            }.also { r ->
-                if (r.isFailure) DebugLogger.log("❌ Pull: ${r.exceptionOrNull()?.message}")
+        val result = withTimeoutOrNull(30000L) {
+            ioMutex.withLock {
+                runCatching {
+                    val t = lib ?: error("ADB terputus")
+                    DebugLogger.setStatus("⬇ Pull ${local.name}")
+                    t.pull(remotePath, local, expectedSize, onProgress)
+                }.also { r ->
+                    if (r.isFailure) DebugLogger.log("❌ Pull: ${r.exceptionOrNull()?.message}")
+                }
             }
         }
+        result ?: Result.failure(Exception("Pull timeout (30s)"))
     }
 
     suspend fun exec(command: String): String = withContext(Dispatchers.IO) {
-        ioMutex.withLock {
-            val t = lib ?: error("ADB terputus")
-            t.exec(command)
+        val result = withTimeoutOrNull(15000L) { // 15 detik timeout exec
+            ioMutex.withLock {
+                val t = lib ?: error("ADB terputus")
+                t.exec(command)
+            }
         }
+        result ?: throw java.io.IOException("ADB Exec Timeout (15s): $command")
     }
 
     override fun close() {
