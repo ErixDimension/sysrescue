@@ -26,46 +26,63 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
 
     suspend fun list(path: String): List<FileEntry.Remote> = withContext(Dispatchers.IO) {
         val normalized = resolvePath(path)
-        // Pastikan slash ada di dalam tanda kutip
         val pathWithSlash = if (normalized.endsWith("/")) normalized else "$normalized/"
         val safePath = shellQuote(pathWithSlash)
         
+        // 🔥 PERINTAH BARU: Persis seperti terminal manual (cd && ls -la)
+        val cmd = "cd $safePath && ls -la"
+        
         val out = try {
-            transport.exec("ls -la --color=never $safePath 2>/dev/null")
+            transport.exec(cmd)
         } catch (e: CancellationException) {
-            throw e // Abaikan pembatalan secara diam-diam
+            throw e
         } catch (e: Throwable) {
-            // Error lain (seperti Timeout) ditangkap dan list dikosongkan
+            DebugLogger.log("[R] Gagal eksekusi: ${e.message}")
             return@withContext emptyList()
         }
 
-        if (out.isBlank()) return@withContext emptyList()
+        if (out.isBlank()) {
+            DebugLogger.log("[R] Output kosong dari $normalized")
+            return@withContext emptyList()
+        }
 
         val lines = out.lines().map { stripAnsi(it) }.filter { it.isNotBlank() }
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
+
+        if (parsed.isEmpty()) {
+            // Jika gagal parse padahal ada output, log 5 baris pertamanya
+            val sample = lines.take(5).joinToString("\n")
+            DebugLogger.log("[R] Gagal parse. Output mentah:\n$sample")
+        }
 
         parsed.take(100)
     }
 
     private fun parseLsLine(line: String, parentPath: String): FileEntry.Remote? {
         val t = line.trim()
-        if (t.isEmpty()) return null
+        if (t.isEmpty() || t.startsWith("total ")) return null
         val first = t[0]
         if (first != 'd' && first != '-' && first != 'l') return null
+        
         val parts = t.split(Regex("\\s+"))
-        if (parts.size < 8) return null
-
-        var timeIdx = -1
+        if (parts.size < 7) return null
+        
+        // Cari index nama file. Biasanya setelah format tanggal (HH:MM atau YYYY)
+        var nameStartIdx = -1
         for (i in parts.indices.reversed()) {
-            if (parts[i].matches(Regex("^\\d{2}:\\d{2}$"))) { timeIdx = i; break }
+            if (parts[i].matches(Regex("^\\d{4}$")) || parts[i].matches(Regex("^\\d{1,2}:\\d{2}$"))) {
+                nameStartIdx = i + 1
+                break
+            }
         }
-        if (timeIdx < 0 || timeIdx >= parts.size - 1) return null
+        
+        if (nameStartIdx < 0 || nameStartIdx >= parts.size) return null
 
-        var name = parts.drop(timeIdx + 1).joinToString(" ")
-        name = name.replace(Regex("\\\\(.)"), "$1")
+        var name = parts.drop(nameStartIdx).joinToString(" ")
+        name = name.replace(Regex("\\\\(.)"), "$1") // Hapus backslash escaping
         if (name == "." || name == "..") return null
 
-        val sizeStr = parts.getOrNull(timeIdx - 2) ?: "0"
+        val sizeStr = parts.getOrNull(nameStartIdx - 2) ?: "0"
         val size = sizeStr.toLongOrNull() ?: 0L
         val isDir = first == 'd'
 

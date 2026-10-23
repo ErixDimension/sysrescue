@@ -6,7 +6,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -33,7 +32,7 @@ class BrowserActivity : Activity() {
 
     private lateinit var listView: ListView
     private lateinit var tvPath: TextView
-    private lateinit var tvStatus: TextView // Live connection status
+    private lateinit var tvStatus: TextView
     private lateinit var adapter: FileAdapter
 
     private val localMgr = LocalFileManager()
@@ -60,7 +59,7 @@ class BrowserActivity : Activity() {
             setBackgroundColor(Color.parseColor("#0B0F14"))
         }
 
-        // 1. Live Connection Status Bar (Paling atas)
+        // Status bar
         tvStatus = TextView(this).apply {
             text = "Menunggu koneksi..."
             setTextColor(Color.YELLOW)
@@ -72,7 +71,7 @@ class BrowserActivity : Activity() {
         }
         root.addView(tvStatus)
 
-        // 2. Top bar (↑ + Path)
+        // Top bar
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -104,7 +103,7 @@ class BrowserActivity : Activity() {
         topBar.addView(tvPath)
         root.addView(topBar)
 
-        // 3. Switch bar (LOCAL / REMOTE)
+        // Switch bar
         val switchBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -127,7 +126,7 @@ class BrowserActivity : Activity() {
         switchBar.addView(btnRemote)
         root.addView(switchBar)
 
-        // 4. ListView
+        // ListView
         listView = ListView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
@@ -138,14 +137,10 @@ class BrowserActivity : Activity() {
         adapter = FileAdapter { entry -> enterFolder(entry) }
         listView.adapter = adapter
 
-        // Panggil fungsi cek koneksi realtime
         startConnectionMonitor()
-        
-        // Load awal
         loadCurrent()
     }
 
-    // 🔄 Fitur Koneksi Live: Memantau koneksi setiap 1 detik
     private fun startConnectionMonitor() {
         scope.launch {
             while (isActive) {
@@ -171,7 +166,6 @@ class BrowserActivity : Activity() {
     private fun switchTo(remote: Boolean) {
         if (isRemote == remote) return
         isRemote = remote
-        // UI Langsung berubah tanpa hapus layar
         loadCurrent()
     }
 
@@ -180,13 +174,9 @@ class BrowserActivity : Activity() {
         val pathLabel = if (isRemote) "[B] $path" else "[A] $path"
         tvPath.text = pathLabel
 
-        // 🔥 CACHE: Jika ada data di cache, tampilkan dulu (instan)
         val cached = FileCache.get(pathLabel)
         if (cached != null) {
             adapter.setItems(cached)
-        } else if (isRemote && AdbDeviceWatcher.transport?.isConnected != true) {
-            // Jika remote tapi tidak ada koneksi, biarkan kosong atau tampilkan pesan
-            adapter.setItems(emptyList())
         }
 
         loadJob?.cancel()
@@ -197,7 +187,9 @@ class BrowserActivity : Activity() {
                     if (t != null && t.isConnected) {
                         val mgr = adbMgr ?: AdbFileManager(t).also { adbMgr = it }
                         mgr.list(path)
-                    } else emptyList()
+                    } else {
+                        return@launch
+                    }
                 } else {
                     localMgr.list(path)
                 }
@@ -207,8 +199,7 @@ class BrowserActivity : Activity() {
                 emptyList()
             }
             
-            // Jika berhasil dapat data, simpan ke cache
-            if (list.isNotEmpty() || (isRemote && AdbDeviceWatcher.transport?.isConnected == true)) {
+            if (list.isNotEmpty() || cached == null) {
                 FileCache.put(pathLabel, list)
                 adapter.setItems(list)
             }
