@@ -1,31 +1,44 @@
 package com.terangbulan.sysrescue.ui
 
 import android.os.Bundle
+import android.widget.Button
+import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
-import androidx.fragment.app.Fragment
-import androidx.viewpager2.adapter.FragmentStateAdapter
-import com.terangbulan.sysrescue.databinding.ActivityBrowserBinding
-import com.google.android.material.tabs.TabLayoutMediator
+import com.terangbulan.sysrescue.R
 
 class BrowserActivity : AppCompatActivity() {
-    private lateinit var b: ActivityBrowserBinding
+    private var isRemote = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        b = ActivityBrowserBinding.inflate(layoutInflater)
-        setContentView(b.root)
-        setTitle("SYSrescue Browser")
+        setContentView(R.layout.activity_browser_simple)
 
-        b.pager.adapter = object : FragmentStateAdapter(this) {
-            override fun getItemCount() = 2
-            override fun createFragment(position: Int): Fragment {
-                return BrowserFragment().apply { setParams(position == 1) }
+        val btnLocal = findViewById<Button>(R.id.btnLocal)
+        val btnRemote = findViewById<Button>(R.id.btnRemote)
+        val container = findViewById<FrameLayout>(R.id.fragmentContainer)
+
+        // Muat fragment LOCAL secara default
+        loadFragment(false)
+
+        btnLocal.setOnClickListener {
+            if (isRemote) {
+                isRemote = false
+                loadFragment(false)
             }
         }
-        
-        // Jangan pakai offscreenPageLimit = 1, biarkan fragment dimuat saat tab dibuka saja
-        TabLayoutMediator(b.tabs, b.pager) { tab, pos ->
-            tab.text = if (pos == 0) "📱 LOCAL" else "🔧 REMOTE"
-        }.attach()
+
+        btnRemote.setOnClickListener {
+            if (!isRemote) {
+                isRemote = true
+                loadFragment(true)
+            }
+        }
+    }
+
+    private fun loadFragment(remote: Boolean) {
+        val fragment = BrowserFragment().apply { setParams(remote) }
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .commit()
     }
 }
