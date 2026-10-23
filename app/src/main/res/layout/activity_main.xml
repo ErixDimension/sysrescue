@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="24dp" android:background="#0B0F14" android:gravity="center_horizontal">
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="12dp" android:background="#0B0F14">
     
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="SYSrescue" android:textColor="#00E5FF" android:textSize="28sp" android:gravity="center" android:textStyle="bold" android:layout_marginTop="60dp" android:layout_marginBottom="20dp"/>
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="SYSrescue" android:textColor="#00E5FF" android:textSize="24sp" android:gravity="center" android:textStyle="bold" android:paddingTop="16dp"/>
+        
+    <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Menunggu device..." android:textColor="#FFFFFF" android:gravity="center" android:paddingTop="8dp" android:paddingBottom="16dp"/>
+        
+    <Button android:id="@+id/btnOpenBrowser" android:layout_width="match_parent" android:layout_height="52dp"
+        android:text="🌐 Buka Browser" android:textSize="16sp" android:enabled="false" android:layout_marginBottom="8dp"/>
+        
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="8dp">
+        <Button android:id="@+id/btnClear" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="Clear"/>
+        <Button android:id="@+id/btnCopy" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="Copy Log" android:layout_marginStart="8dp"/>
+    </LinearLayout>
     
-    <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Menunggu device..." android:textColor="#FFFFFF" android:textSize="16sp" android:gravity="center" android:layout_marginBottom="40dp"/>
-    
-    <Button android:id="@+id/btnOpenBrowser" android:layout_width="match_parent" android:layout_height="56dp" android:text="🌐 Buka Browser" android:textSize="16sp" android:enabled="false"/>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:background="#111820" android:padding="8dp">
+        <TextView android:id="@+id/tvLog" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#00FF00" android:textSize="11sp" android:fontFamily="monospace"/>
+    </ScrollView>
 </LinearLayout>

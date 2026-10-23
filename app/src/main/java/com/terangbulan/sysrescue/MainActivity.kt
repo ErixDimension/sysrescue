@@ -1,32 +1,45 @@
 package com.terangbulan.sysrescue
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
-import com.terangbulan.sysrescue.databinding.ActivityMainBinding
 import com.terangbulan.sysrescue.ui.BrowserActivity
 import com.terangbulan.sysrescue.util.AnrWatchdog
 import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var b: ActivityMainBinding
+    private lateinit var tvStatus: TextView
+    private lateinit var tvLog: TextView
+    private lateinit var btnOpenBrowser: Button
+    private lateinit var btnClear: Button
+    private lateinit var btnCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         AnrWatchdog.start(this)
-        b = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(b.root)
+        setContentView(R.layout.activity_main)
+
+        // Inisialisasi View secara manual
+        tvStatus = findViewById(R.id.tvStatus)
+        tvLog = findViewById(R.id.tvLog)
+        btnOpenBrowser = findViewById(R.id.btnOpenBrowser)
+        btnClear = findViewById(R.id.btnClear)
+        btnCopy = findViewById(R.id.btnCopy)
 
         AdbDeviceWatcher.start(this)
         requestAllFilesAccessIfNeeded()
@@ -34,14 +47,34 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 DebugLogger.status.collect {
-                    b.tvStatus.text = it
-                    b.btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true
+                    tvStatus.text = it
+                    btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true
                 }
             }
         }
 
-        b.btnOpenBrowser.setOnClickListener {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                DebugLogger.logs.collect { fullLog ->
+                    val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
+                    tvLog.text = displayLog
+                }
+            }
+        }
+
+        btnOpenBrowser.setOnClickListener {
             startActivity(Intent(this, BrowserActivity::class.java))
+        }
+
+        btnClear.setOnClickListener { DebugLogger.clear() }
+
+        btnCopy.setOnClickListener {
+            val text = DebugLogger.logs.value
+            if (text.isNotBlank()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Log", text))
+                Toast.makeText(this, "Log dicopy", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
