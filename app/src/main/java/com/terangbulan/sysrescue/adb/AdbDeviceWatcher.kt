@@ -13,7 +13,7 @@ import android.hardware.usb.*
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import com.terangbulan.sysrescue.ptp.AdbUsbTransport
+import com.terangbulan.sysrescue.adb.AdbUsbTransport
 import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
