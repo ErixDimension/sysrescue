@@ -11,16 +11,21 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
-import androidx.lifecycle.lifecycleScope
 import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.manager.AdbFileManager
 import com.terangbulan.sysrescue.manager.LocalFileManager
-import com.terangbulan.sysrescue.util.FormatUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class BrowserActivity : Activity() {
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var loadJob: Job? = null
+
     private lateinit var listView: ListView
     private lateinit var tvPath: TextView
     private lateinit var adapter: FileAdapter
@@ -31,7 +36,6 @@ class BrowserActivity : Activity() {
 
     private data class NavSeg(val path: String)
     private val navStack = mutableListOf<NavSeg>()
-    private var loadJob: Job? = null
 
     private fun dp(dp: Int): Int = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics
@@ -40,7 +44,6 @@ class BrowserActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Bangun UI murni Kotlin, tanpa XML
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -78,7 +81,7 @@ class BrowserActivity : Activity() {
         topBar.addView(tvPath)
         root.addView(topBar)
 
-        // Tombol switch LOCAL / REMOTE
+        // Switch bar
         val switchBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -101,7 +104,7 @@ class BrowserActivity : Activity() {
         switchBar.addView(btnRemote)
         root.addView(switchBar)
 
-        // ListView (bukan RecyclerView)
+        // ListView
         listView = ListView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
@@ -112,7 +115,6 @@ class BrowserActivity : Activity() {
         adapter = FileAdapter { entry -> enterFolder(entry) }
         listView.adapter = adapter
 
-        // Start di LOCAL
         navStack.add(NavSeg(localMgr.rootPath()))
         loadCurrent()
     }
@@ -128,7 +130,7 @@ class BrowserActivity : Activity() {
     private fun loadCurrent() {
         val path = navStack.last().path
         loadJob?.cancel()
-        loadJob = lifecycleScope.launch {
+        loadJob = scope.launch {
             tvPath.text = path
             val list: List<FileEntry> = if (isRemote) {
                 val t = AdbDeviceWatcher.transport
@@ -156,5 +158,10 @@ class BrowserActivity : Activity() {
             navStack.removeAt(navStack.size - 1)
             loadCurrent()
         }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 }

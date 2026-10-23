@@ -14,16 +14,19 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.ui.BrowserActivity
 import com.terangbulan.sysrescue.util.AnrWatchdog
 import com.terangbulan.sysrescue.util.DebugLogger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class MainActivity : Activity() {
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
     private lateinit var btnPermission: Button
@@ -47,21 +50,17 @@ class MainActivity : Activity() {
 
         btnPermission.setOnClickListener { requestAllFilesAccess() }
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                DebugLogger.status.collect {
-                    tvStatus.text = it
-                    btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true
-                }
+        scope.launch {
+            DebugLogger.status.collect {
+                tvStatus.text = it
+                btnOpenBrowser.isEnabled = AdbDeviceWatcher.transport?.isConnected == true
             }
         }
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                DebugLogger.logs.collect { fullLog ->
-                    val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
-                    tvLog.text = displayLog
-                }
+        scope.launch {
+            DebugLogger.logs.collect { fullLog ->
+                val displayLog = if (fullLog.length > 4000) "... (dipotong)\n" + fullLog.takeLast(4000) else fullLog
+                tvLog.text = displayLog
             }
         }
 
@@ -84,6 +83,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         checkStoragePermission()
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 
     private fun checkStoragePermission() {

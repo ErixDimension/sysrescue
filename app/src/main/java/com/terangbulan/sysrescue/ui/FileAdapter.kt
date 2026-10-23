@@ -1,5 +1,6 @@
 package com.terangbulan.sysrescue.ui
 
+import android.content.Context
 import android.graphics.Color
 import android.util.TypedValue
 import android.view.Gravity
@@ -24,11 +25,12 @@ class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : BaseAdapter(
     override fun getItem(position: Int): FileEntry = items[position]
     override fun getItemId(position: Int): Long = position.toLong()
 
-    override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-        val tv = (convertView as? TextView) ?: TextView(parent?.context).apply {
+    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+        val context = parent.context
+        val tv = (convertView as? TextView) ?: TextView(context).apply {
             layoutParams = AbsListView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(parent?.context ?: return@apply, 52)
+                dp(context, 52)
             )
             setPadding(dp(context, 16), 0, dp(context, 16), 0)
             gravity = Gravity.CENTER_VERTICAL
@@ -47,6 +49,6 @@ class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : BaseAdapter(
         return tv
     }
 
-    private fun dp(context: android.content.Context, dp: Int): Int =
+    private fun dp(context: Context, dp: Int): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), context.resources.displayMetrics).toInt()
 }
