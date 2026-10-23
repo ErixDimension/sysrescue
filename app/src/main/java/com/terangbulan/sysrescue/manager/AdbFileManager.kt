@@ -4,8 +4,10 @@ import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.adb.AdbUsbTransport
 import com.terangbulan.sysrescue.util.DebugLogger
 import com.terangbulan.sysrescue.util.PathUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 class AdbFileManager(private val transport: AdbUsbTransport) {
 
@@ -25,19 +27,28 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
 
     suspend fun list(path: String): List<FileEntry.Remote> = withContext(Dispatchers.IO) {
         val normalized = resolvePath(path)
+        
+        // Perbaikan: Slash '/' dimasukkan ke dalam quote, bukan di luar
+        val safePath = if (normalized.endsWith("/")) normalized else "$normalized/"
+        
         val out = try {
-            transport.exec("ls -la --color=never ${shellQuote(normalized)}/ 2>/dev/null")
+            transport.exec("ls -la --color=never ${shellQuote(safePath)} 2>/dev/null")
+        } catch (e: CancellationException) {
+            throw e // Abaikan pembatalan (user pindah folder terlalu cepat)
         } catch (e: Throwable) {
-            DebugLogger.log("[R] exec error: ${e.message}")
+            DebugLogger.log("[R] error baca: ${e.message}")
             return@withContext emptyList()
         }
 
-        if (out.isBlank()) return@withContext emptyList()
+        if (out.isBlank()) {
+            DebugLogger.log("[R] folder kosong atau akses ditolak: $normalized")
+            return@withContext emptyList()
+        }
 
         val lines = out.lines().map { stripAnsi(it) }.filter { it.isNotBlank() }
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
 
-        // BATASI MAKSIMAL 300 ITEM AGAR UI TIDAK ANR
+        // Batasi 100 file
         parsed.take(100)
     }
 

@@ -3,6 +3,7 @@ package com.terangbulan.sysrescue.adb
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import com.terangbulan.sysrescue.util.DebugLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -19,7 +20,7 @@ class AdbUsbTransport(
 
     companion object {
         fun hasAdb(device: UsbDevice): Boolean = AdbLibUsbTransport.hasAdb(device)
-        private const val EXEC_TIMEOUT_MS = 5000L
+        private const val EXEC_TIMEOUT_MS = 15000L // Naikkan jadi 15 detik
         private const val PUSH_PULL_TIMEOUT_MS = 60000L
     }
 
@@ -46,27 +47,13 @@ class AdbUsbTransport(
         }
     }
 
-    private fun abandonTransport(reason: String) {
-        DebugLogger.log("⚠️ $reason! Memutuskan koneksi ADB (Abandon).")
-        val oldLib = lib
-        lib = null // Langsung null-kan agar perintah berikutnya langsung error/fallback
-        
-        // Tutup koneksi di background agar tidak memblokir UI/Coroutine
-        Thread {
-            try { oldLib?.close() } catch (_: Throwable) {}
-        }.start()
-    }
-
     suspend fun push(local: File, remotePath: String, onProgress: ((Long, Long) -> Unit)? = null): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val t = lib ?: error("ADB terputus")
             val res = withTimeoutOrNull(PUSH_PULL_TIMEOUT_MS) {
                 ioMutex.withLock { t.push(local, remotePath, onProgress) }
             }
-            if (res == null) {
-                abandonTransport("Push Timeout")
-                error("Push Timeout")
-            }
+            if (res == null) error("Push Timeout")
         }
     }
 
@@ -76,26 +63,30 @@ class AdbUsbTransport(
             val res = withTimeoutOrNull(PUSH_PULL_TIMEOUT_MS) {
                 ioMutex.withLock { t.pull(remotePath, local, expectedSize, onProgress) }
             }
-            if (res == null) {
-                abandonTransport("Pull Timeout")
-                error("Pull Timeout")
-            }
+            if (res == null) error("Pull Timeout")
         }
     }
 
     suspend fun exec(command: String): String = withContext(Dispatchers.IO) {
         val t = lib ?: throw IOException("ADB terputus")
-        val res = withTimeoutOrNull(EXEC_TIMEOUT_MS) {
-            ioMutex.withLock { t.exec(command) }
+        
+        try {
+            val res = withTimeoutOrNull(EXEC_TIMEOUT_MS) {
+                ioMutex.withLock { t.exec(command) }
+            }
+            // Jika timeout, JANGAN abandon koneksi. Cukup lempar error dan biarkan UI kosong.
+            res ?: throw IOException("Timeout membaca folder. (Koneksi ADB tetap aman).")
+        } catch (e: CancellationException) {
+            throw e // Biarkan coroutine batal secara natural tanpa bikin log error parah
+        } catch (e: Exception) {
+            DebugLogger.log("⚠️ exec warning: ${e.message}")
+            throw e
         }
-        if (res == null) {
-            abandonTransport("Exec Timeout ($command)")
-            throw IOException("Timeout")
-        }
-        res
     }
 
     override fun close() {
-        abandonTransport("Closed manually")
+        val oldLib = lib
+        lib = null
+        Thread { try { oldLib?.close() } catch (_: Throwable) {} }.start()
     }
 }
