@@ -142,26 +142,33 @@ class AdbLibUsbTransport(
         } finally { runCatching { stream.close() } }
     }
 
-    fun exec(command: String): String {
+    // 🔥 EXEC SEBAGAI SUSPEND: Bisa dibatalkan seketika saat user pindah tab!
+    suspend fun exec(command: String): String = withContext(Dispatchers.IO) {
         val ac = adbConn ?: error("ADB belum terhubung")
         val stream = ac.open("shell:$command")
         val result = StringBuilder()
         var isStreamClosed = false
+        
         try {
-            val readJob = CoroutineScope(Dispatchers.IO).launch {
+            val readJob = launch {
                 while (true) {
                     val chunk = try { stream.read() } catch (e: IOException) { break }
                     result.append(String(chunk, Charsets.UTF_8))
                 }
                 isStreamClosed = true
             }
-            runBlocking { withTimeoutOrNull(8000L) { readJob.join() } }
+            
+            // Timeout 8 detik
+            withTimeoutOrNull(8000L) { readJob.join() }
+            
             if (!isStreamClosed) {
                 runCatching { stream.close() }
                 readJob.cancel()
             }
-        } finally { runCatching { stream.close() } }
-        return result.toString()
+        } finally { 
+            runCatching { stream.close() } 
+        }
+        result.toString()
     }
 
     private fun releaseUsb() {

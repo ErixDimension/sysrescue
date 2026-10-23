@@ -146,7 +146,6 @@ class BrowserActivity : Activity() {
         scope.launch {
             while (isActive) {
                 val connected = AdbDeviceWatcher.transport?.isConnected == true
-                
                 if (isRemote) {
                     if (connected) {
                         tvStatus.text = "🟢 Remote Terhubung"
@@ -174,13 +173,21 @@ class BrowserActivity : Activity() {
     private fun loadCurrent() {
         val path = currentPath()
         val pathLabel = if (isRemote) "[B] $path" else "[A] $path"
+        
+        // 🔥 1. UPDATE PATH SECARA INSTAN (Synchronous)
         tvPath.text = pathLabel
 
+        // 🔥 2. TAMPILKAN CACHE ATAU LOADING BAR (Instan)
         val cached = FileCache.get(pathLabel)
         if (cached != null) {
             adapter.setItems(cached)
+            adapter.setLoading(false)
+        } else {
+            // Jika belum ada cache, langsung tampilkan "Memuat..."
+            adapter.setLoading(true)
         }
 
+        // 🔥 3. BATALKAN PROSES SEBELUMNYA & JALANKAN YANG BARU
         loadJob?.cancel()
         loadJob = scope.launch {
             val list: List<FileEntry> = try {
@@ -189,22 +196,20 @@ class BrowserActivity : Activity() {
                     if (t != null && t.isConnected) {
                         val mgr = adbMgr ?: AdbFileManager(t).also { adbMgr = it }
                         mgr.list(path)
-                    } else {
-                        return@launch
-                    }
+                    } else emptyList()
                 } else {
                     localMgr.list(path)
                 }
             } catch (e: CancellationException) {
-                throw e
+                throw e // Batalkan dengan tenang
             } catch (e: Throwable) {
                 emptyList()
             }
             
-            if (list.isNotEmpty() || cached == null) {
-                FileCache.put(pathLabel, list)
-                adapter.setItems(list)
-            }
+            // Simpan ke cache dan tampilkan
+            FileCache.put(pathLabel, list)
+            adapter.setItems(list)
+            adapter.setLoading(false)
         }
     }
 

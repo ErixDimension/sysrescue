@@ -15,13 +15,20 @@ import com.terangbulan.sysrescue.util.FormatUtil
 class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : BaseAdapter() {
 
     private var items: List<FileEntry> = emptyList()
+    private var isLoading = false
 
     fun setItems(newItems: List<FileEntry>) {
         items = newItems
         notifyDataSetChanged()
     }
 
-    override fun getCount(): Int = items.size
+    fun setLoading(loading: Boolean) {
+        if (isLoading == loading) return
+        isLoading = loading
+        notifyDataSetChanged()
+    }
+
+    override fun getCount(): Int = if (isLoading && items.isEmpty()) 1 else items.size
     override fun getItem(position: Int): FileEntry = items[position]
     override fun getItemId(position: Int): Long = position.toLong()
 
@@ -39,6 +46,13 @@ class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : BaseAdapter(
             setBackgroundColor(Color.parseColor("#0B0F14"))
         }
 
+        if (isLoading && items.isEmpty()) {
+            tv.text = "⏳ Memuat data..."
+            tv.setTextColor(Color.GRAY)
+            return tv
+        }
+
+        tv.setTextColor(Color.WHITE)
         val entry = items[position]
         val icon = if (entry.isDir) "📁 " else "📄 "
         val size = if (entry.isDir) "" else " — ${FormatUtil.formatBytes(entry.size)}"
