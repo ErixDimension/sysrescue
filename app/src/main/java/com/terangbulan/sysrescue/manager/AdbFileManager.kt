@@ -7,7 +7,6 @@ import com.terangbulan.sysrescue.util.PathUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.IOException
 
 class AdbFileManager(private val transport: AdbUsbTransport) {
 
@@ -27,28 +26,24 @@ class AdbFileManager(private val transport: AdbUsbTransport) {
 
     suspend fun list(path: String): List<FileEntry.Remote> = withContext(Dispatchers.IO) {
         val normalized = resolvePath(path)
-        
-        // Perbaikan: Slash '/' dimasukkan ke dalam quote, bukan di luar
-        val safePath = if (normalized.endsWith("/")) normalized else "$normalized/"
+        // Pastikan slash ada di dalam tanda kutip
+        val pathWithSlash = if (normalized.endsWith("/")) normalized else "$normalized/"
+        val safePath = shellQuote(pathWithSlash)
         
         val out = try {
-            transport.exec("ls -la --color=never ${shellQuote(safePath)} 2>/dev/null")
+            transport.exec("ls -la --color=never $safePath 2>/dev/null")
         } catch (e: CancellationException) {
-            throw e // Abaikan pembatalan (user pindah folder terlalu cepat)
+            throw e // Abaikan pembatalan secara diam-diam
         } catch (e: Throwable) {
-            DebugLogger.log("[R] error baca: ${e.message}")
+            // Error lain (seperti Timeout) ditangkap dan list dikosongkan
             return@withContext emptyList()
         }
 
-        if (out.isBlank()) {
-            DebugLogger.log("[R] folder kosong atau akses ditolak: $normalized")
-            return@withContext emptyList()
-        }
+        if (out.isBlank()) return@withContext emptyList()
 
         val lines = out.lines().map { stripAnsi(it) }.filter { it.isNotBlank() }
         val parsed = lines.mapNotNull { parseLsLine(it, normalized) }
 
-        // Batasi 100 file
         parsed.take(100)
     }
 

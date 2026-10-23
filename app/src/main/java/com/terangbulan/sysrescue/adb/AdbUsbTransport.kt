@@ -20,8 +20,8 @@ class AdbUsbTransport(
 
     companion object {
         fun hasAdb(device: UsbDevice): Boolean = AdbLibUsbTransport.hasAdb(device)
-        private const val EXEC_TIMEOUT_MS = 15000L // Naikkan jadi 15 detik
-        private const val PUSH_PULL_TIMEOUT_MS = 60000L
+        private const val EXEC_TIMEOUT_MS = 20000L // 20 detik agar aman untuk folder besar
+        private const val PUSH_PULL_TIMEOUT_MS = 120000L
     }
 
     private var lib: AdbLibUsbTransport? = null
@@ -74,12 +74,13 @@ class AdbUsbTransport(
             val res = withTimeoutOrNull(EXEC_TIMEOUT_MS) {
                 ioMutex.withLock { t.exec(command) }
             }
-            // Jika timeout, JANGAN abandon koneksi. Cukup lempar error dan biarkan UI kosong.
-            res ?: throw IOException("Timeout membaca folder. (Koneksi ADB tetap aman).")
+            // Jika timeout, JANGAN tutup koneksi. Hanya lemparkan error ke UI.
+            res ?: throw IOException("Timeout membaca folder (20 detik)")
         } catch (e: CancellationException) {
-            throw e // Biarkan coroutine batal secara natural tanpa bikin log error parah
+            // Jangan log jika ini hanya pembatalan (user pindah folder cepat)
+            throw e 
         } catch (e: Exception) {
-            DebugLogger.log("⚠️ exec warning: ${e.message}")
+            DebugLogger.log("⚠️ Exec error: ${e.message}")
             throw e
         }
     }
@@ -87,6 +88,7 @@ class AdbUsbTransport(
     override fun close() {
         val oldLib = lib
         lib = null
+        // Tutup di background agar tidak nge-lag
         Thread { try { oldLib?.close() } catch (_: Throwable) {} }.start()
     }
 }
