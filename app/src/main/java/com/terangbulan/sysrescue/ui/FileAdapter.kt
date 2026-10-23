@@ -17,10 +17,6 @@ class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : ListAdapter<
             override fun areItemsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean = oldItem.name == newItem.name
             override fun areContentsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean = oldItem == newItem
         }
-        
-        // Icon sederhana (pakai emoji sudah ter-cache di memory)
-        private val ICON_FOLDER = "📁 "
-        private val ICON_FILE = "📄 "
     }
 
     inner class VH(v: TextView) : RecyclerView.ViewHolder(v) {
@@ -34,7 +30,7 @@ class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : ListAdapter<
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val entry = getItem(position)
-        val icon = if (entry.isDir) ICON_FOLDER else ICON_FILE
+        val icon = if (entry.isDir) "📁 " else "📄 "
         val size = if (entry.isDir) "" else " — ${FormatUtil.formatBytes(entry.size)}"
         holder.tv.text = "$icon${entry.name}$size"
         

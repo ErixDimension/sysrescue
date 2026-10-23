@@ -4,20 +4,25 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.terangbulan.sysrescue.R
 import com.terangbulan.sysrescue.adb.AdbDeviceWatcher
 import com.terangbulan.sysrescue.data.FileEntry
-import com.terangbulan.sysrescue.databinding.FragmentBrowserBinding
 import com.terangbulan.sysrescue.manager.AdbFileManager
 import com.terangbulan.sysrescue.manager.LocalFileManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class BrowserFragment : Fragment() {
-    private var _b: FragmentBrowserBinding? = null
-    private val b get() = _b
+    private var rvFiles: RecyclerView? = null
+    private var tvPath: TextView? = null
+    private var btnUp: Button? = null
+
     private lateinit var adapter: FileAdapter
     private val localMgr = LocalFileManager()
     private var adbMgr: AdbFileManager? = null
@@ -29,34 +34,36 @@ class BrowserFragment : Fragment() {
 
     fun setParams(remote: Boolean) { this.isRemote = remote }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val vb = FragmentBrowserBinding.inflate(inflater, container, false)
-        _b = vb
-        return vb.root
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+        return inflater.inflate(R.layout.fragment_browser_simple, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val vb = _b ?: return
+        rvFiles = view.findViewById(R.id.rvFiles)
+        tvPath = view.findViewById(R.id.tvPath)
+        btnUp = view.findViewById(R.id.btnUp)
+
         adapter = FileAdapter { entry -> enterFolder(entry) }
-        vb.rvFiles.layoutManager = LinearLayoutManager(requireContext())
-        vb.rvFiles.adapter = adapter
+        rvFiles?.layoutManager = LinearLayoutManager(requireContext())
+        rvFiles?.adapter = adapter
 
         if (navStack.isEmpty()) {
             val start = if (isRemote) "/sdcard" else localMgr.rootPath()
             navStack.add(NavSeg(start, start))
         }
-        vb.btnUp.setOnClickListener { goUp() }
+        btnUp?.setOnClickListener { goUp() }
         loadCurrent()
     }
 
     private fun loadCurrent() {
-        val vb = _b ?: return
         val path = navStack.last().path
         loadJob?.cancel()
         loadJob = viewLifecycleOwner.lifecycleScope.launch {
-            vb.tvPath.text = path
-            val list = if (isRemote) {
+            tvPath?.text = path
+            
+            // Eksplisit mendeklarasikan List<FileEntry> agar Kotlin tidak bingung
+            val list: List<FileEntry> = if (isRemote) {
                 val t = AdbDeviceWatcher.transport
                 if (t != null && t.isConnected) {
                     val mgr = adbMgr ?: AdbFileManager(t).also { adbMgr = it }
@@ -65,8 +72,10 @@ class BrowserFragment : Fragment() {
             } else {
                 localMgr.list(path)
             }
-            // ✅ Perbaikan: Ganti setItems menjadi submitList (ListAdapter)
-            _b?.let { adapter.submitList(list) }
+            
+            if (isAdded) {
+                adapter.submitList(list)
+            }
         }
     }
 
@@ -87,7 +96,9 @@ class BrowserFragment : Fragment() {
 
     override fun onDestroyView() {
         loadJob?.cancel()
-        _b = null
+        rvFiles = null
+        tvPath = null
+        btnUp = null
         super.onDestroyView()
     }
 }
