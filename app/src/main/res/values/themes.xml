@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Gunakan tema AppCompat yang ringan tanpa ActionBar -->
-    <style name="Theme.SYSrescue" parent="Theme.AppCompat.NoActionBar">
+    <style name="Theme.SYSrescue" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#0B0F14</item>
+        <item name="android:colorAccent">#00E5FF</item>
     </style>
 </resources>

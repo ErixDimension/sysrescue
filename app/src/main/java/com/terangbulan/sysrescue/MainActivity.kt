@@ -1,5 +1,6 @@
 package com.terangbulan.sysrescue
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -13,7 +14,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -23,7 +23,7 @@ import com.terangbulan.sysrescue.util.AnrWatchdog
 import com.terangbulan.sysrescue.util.DebugLogger
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
     private lateinit var btnPermission: Button
@@ -45,10 +45,7 @@ class MainActivity : AppCompatActivity() {
 
         AdbDeviceWatcher.start(this)
 
-        // Tombol untuk buka pengaturan izin
-        btnPermission.setOnClickListener {
-            requestAllFilesAccess()
-        }
+        btnPermission.setOnClickListener { requestAllFilesAccess() }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -86,17 +83,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Setiap kali aplikasi dibuka kembali, cek apakah izin sudah diberikan
         checkStoragePermission()
     }
 
     private fun checkStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager()) {
-                btnPermission.visibility = View.GONE
-            } else {
-                btnPermission.visibility = View.VISIBLE
-            }
+            btnPermission.visibility = if (Environment.isExternalStorageManager()) View.GONE else View.VISIBLE
         } else {
             btnPermission.visibility = View.GONE
         }
@@ -109,8 +101,7 @@ class MainActivity : AppCompatActivity() {
                 intent.data = Uri.parse("package:$packageName")
                 startActivity(intent)
             } catch (_: Throwable) {
-                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                startActivity(intent)
+                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
             }
         }
     }

@@ -1,57 +1,52 @@
 package com.terangbulan.sysrescue.ui
 
 import android.graphics.Color
+import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.AbsListView
+import android.widget.BaseAdapter
 import android.widget.TextView
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListAdapter
-import androidx.recyclerview.widget.RecyclerView
 import com.terangbulan.sysrescue.data.FileEntry
 import com.terangbulan.sysrescue.util.FormatUtil
 
-class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : ListAdapter<FileEntry, FileAdapter.VH>(DIFF) {
+class FileAdapter(private val onFolderClick: (FileEntry) -> Unit) : BaseAdapter() {
 
-    companion object {
-        private val DIFF = object : DiffUtil.ItemCallback<FileEntry>() {
-            override fun areItemsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean = oldItem.name == newItem.name
-            override fun areContentsTheSame(oldItem: FileEntry, newItem: FileEntry): Boolean = oldItem == newItem
-        }
+    private var items: List<FileEntry> = emptyList()
+
+    fun setItems(newItems: List<FileEntry>) {
+        items = newItems
+        notifyDataSetChanged()
     }
 
-    inner class VH(val tv: TextView) : RecyclerView.ViewHolder(tv)
+    override fun getCount(): Int = items.size
+    override fun getItem(position: Int): FileEntry = items[position]
+    override fun getItemId(position: Int): Long = position.toLong()
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        // 🔥 BUAT TEXTVIEW MURNI DARI KODE KOTLIN (TANPA XML)
-        val tv = TextView(parent.context).apply {
-            layoutParams = RecyclerView.LayoutParams(
+    override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+        val tv = (convertView as? TextView) ?: TextView(parent?.context).apply {
+            layoutParams = AbsListView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                140 // Tinggi baris diperbesar agar mudah disentuh
+                dp(parent?.context ?: return@apply, 52)
             )
-            setPadding(32, 0, 32, 0)
+            setPadding(dp(context, 16), 0, dp(context, 16), 0)
             gravity = Gravity.CENTER_VERTICAL
-            textSize = 16f
+            textSize = 14f
             setTextColor(Color.WHITE)
-            isClickable = true
-            isFocusable = true
-            
-            // Efek klik sederhana
-            val outValue = android.util.TypedValue()
-            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-            setBackgroundResource(outValue.resourceId)
+            setBackgroundColor(Color.parseColor("#0B0F14"))
         }
-        return VH(tv)
-    }
 
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        val entry = getItem(position)
+        val entry = items[position]
         val icon = if (entry.isDir) "📁 " else "📄 "
         val size = if (entry.isDir) "" else " — ${FormatUtil.formatBytes(entry.size)}"
-        
-        holder.tv.text = "$icon${entry.name}$size"
-        
-        holder.tv.setOnClickListener {
+        tv.text = "$icon${entry.name}$size"
+        tv.setOnClickListener {
             if (entry.isDir) onFolderClick(entry)
         }
+        return tv
     }
+
+    private fun dp(context: android.content.Context, dp: Int): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), context.resources.displayMetrics).toInt()
 }
