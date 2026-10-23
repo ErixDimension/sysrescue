@@ -22,6 +22,10 @@ class BrowserActivity : AppCompatActivity() {
                 return BrowserFragment().apply { setParams(position == 1) }
             }
         }
+        
+        // 🔥 KUNCI PERFORMA: Cegah fragment dihancurkan & dibuat ulang saat pindah tab
+        b.pager.offscreenPageLimit = 1
+        
         TabLayoutMediator(b.tabs, b.pager) { tab, pos ->
             tab.text = if (pos == 0) "📱 LOCAL" else "🔧 REMOTE"
         }.attach()

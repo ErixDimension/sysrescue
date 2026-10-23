@@ -11,7 +11,6 @@ import com.tananaev.adblib.AdbBase64
 import com.tananaev.adblib.AdbConnection
 import com.tananaev.adblib.AdbCrypto
 import com.tananaev.adblib.AdbStream
-import kotlinx.coroutines.*
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -139,26 +138,19 @@ class AdbLibUsbTransport(
         val ac = adbConn ?: error("ADB belum terhubung")
         val stream = ac.open("shell:$command")
         val result = StringBuilder()
-        var isStreamClosed = false
         try {
-            val readJob = CoroutineScope(Dispatchers.IO).launch {
-                while (true) {
-                    val chunk = try { stream.read() } catch (e: IOException) { break }
-                    result.append(String(chunk, Charsets.UTF_8))
-                }
-                isStreamClosed = true
+            while (true) {
+                val chunk = try { stream.read() } catch (e: IOException) { break }
+                result.append(String(chunk, Charsets.UTF_8))
             }
-            runBlocking { withTimeoutOrNull(8000L) { readJob.join() } }
-            if (!isStreamClosed) {
-                DebugLogger.log("⚠️ exec() timeout! Memaksa menutup stream.")
-                runCatching { stream.close() }
-                readJob.cancel()
-            }
-        } finally { runCatching { stream.close() } }
+        } finally { 
+            runCatching { stream.close() } 
+        }
         return result.toString()
     }
 
     override fun close() {
+        // Jangan pernah panggil ini di Main Thread!
         runCatching { adbConn?.close() }
         adbConn = null; adbCrypto = null
         runCatching { connection?.close() }
